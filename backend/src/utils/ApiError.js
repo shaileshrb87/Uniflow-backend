@@ -2,9 +2,9 @@
  * Custom error class for API errors
  */
 class ApiError extends Error {
-  constructor(message, statusCode, data = null) {
+  constructor(message, statuscoursecode, data = null) {
     super(message);
-    this.statusCode = statusCode;
+    this.statuscoursecode = statuscoursecode;
     this.isOperational = true;
     this.data = data;
 

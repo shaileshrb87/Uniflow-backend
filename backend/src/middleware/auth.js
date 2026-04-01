@@ -24,11 +24,11 @@ const auth = asyncHandler(async (req, res, next) => {
   try {
     // Verify token
     console.log('🔍 Auth Debug - Verifying token with JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log('🔍 Auth Debug - Decoded token:', decoded);
+    const decoursecoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('🔍 Auth Debug - Decoursecoded token:', decoursecoded);
 
     // Get user from token (handle both old 'userId' and new 'id' formats)
-    const userId = decoded.id || decoded.userId;
+    const userId = decoursecoded.id || decoursecoded.userId;
     console.log('Auth Debug - Looking for user ID:', userId);
     
     const user = await User.findById(userId).select('-password');
@@ -126,10 +126,10 @@ const optionalAuth = asyncHandler(async (req, res, next) => {
   if (token) {
     try {
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoursecoded = jwt.verify(token, process.env.JWT_SECRET);
 
       // Get user from token
-      const user = await User.findById(decoded.id).select('-password');
+      const user = await User.findById(decoursecoded.id).select('-password');
       
       if (user && user.isActive) {
         req.user = user;

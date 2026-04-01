@@ -4,17 +4,17 @@ class SchedulingAlgorithm {
   constructor(options = {}) {
     this.clashDetector = new ClashDetector();
     this.options = {
-      algorithm: options.algorithm || 'greedy', // 'greedy', 'genetic', 'constraint_satisfaction'
+      algorithm: options.algorithm || 'greedy',
       maxIterations: options.maxIterations || 1000,
       populationSize: options.populationSize || 50,
       mutationRate: options.mutationRate || 0.1,
-      timeSlotDuration: options.timeSlotDuration || 60, // minutes
+      timeSlotDuration: options.timeSlotDuration || 60,
       workingDays: options.workingDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
       workingHours: options.workingHours || { start: '08:00', end: '18:00' },
-      breakDuration: options.breakDuration || 15, // minutes between classes
+      breakDuration: options.breakDuration || 0,  // 0 = no gap, slots align exactly on the hour
       ...options
     };
-    
+
     this.constraints = {
       hard: [
         'no_teacher_conflict',
@@ -32,28 +32,18 @@ class SchedulingAlgorithm {
     };
   }
 
-  /**
-   * Main scheduling function
-   * @param {Object} input - Input data containing courses, teachers, rooms, constraints
-   * @returns {Object} Generated timetable with conflicts and statistics
-   */
   async generateTimetable(input) {
     try {
       console.log(`Starting timetable generation using ${this.options.algorithm} algorithm...`);
-      
-      // Validate input data
+
       const validation = this.validateInput(input);
       if (!validation.isValid) {
         throw new Error(`Input validation failed: ${validation.errors.join(', ')}`);
       }
 
-      // Prepare data structures
       const prepared = this.prepareData(input);
-      
-      // Generate time slots
       const timeSlots = this.generateTimeSlots();
-      
-      // Run the selected algorithm
+
       let result;
       switch (this.options.algorithm) {
         case 'greedy':
@@ -69,12 +59,9 @@ class SchedulingAlgorithm {
           throw new Error(`Unknown algorithm: ${this.options.algorithm}`);
       }
 
-      // Validate result and detect conflicts
       const conflicts = this.clashDetector.detectClashes(result.schedule);
-      
-      // Calculate statistics
       const statistics = this.calculateStatistics(result.schedule, prepared);
-      
+
       return {
         success: true,
         algorithm: this.options.algorithm,
@@ -101,62 +88,44 @@ class SchedulingAlgorithm {
     }
   }
 
-  /**
-   * Greedy Algorithm Implementation
-   */
   async greedyAlgorithm(prepared, timeSlots) {
     const startTime = Date.now();
     const schedule = [];
     let iterations = 0;
-    
-    // Sort courses by priority (credits, enrollment, constraints)
+
     const sortedCourses = this.prioritizeCourses(prepared.courses);
-    
+
     for (const course of sortedCourses) {
       iterations++;
-      
+
       let assigned = false;
       const attempts = [];
-      
-      // Try to assign each session of the course
+
       for (let session = 0; session < course.sessionsPerWeek; session++) {
         let bestSlot = null;
         let bestScore = -1;
-        
-        // Try all possible combinations
+
         for (const timeSlot of timeSlots) {
           for (const room of prepared.rooms) {
             for (const teacher of prepared.teachers) {
-              
-              // Check if this combination is valid for this course
               if (!this.isValidAssignment(course, teacher, room, timeSlot, schedule)) {
                 continue;
               }
-              
-              // Calculate score for this assignment
+
               const score = this.calculateAssignmentScore(course, teacher, room, timeSlot, schedule, prepared);
-              
+
               if (score > bestScore) {
                 bestScore = score;
-                bestSlot = {
-                  course: course,
-                  teacher: teacher,
-                  room: room,
-                  timeSlot: timeSlot,
-                  score: score
-                };
+                bestSlot = { course, teacher, room, timeSlot, score };
               }
             }
           }
         }
-        
-        // Assign the best slot found
+
         if (bestSlot) {
           const scheduleEntry = this.createScheduleEntry(bestSlot);
           schedule.push(scheduleEntry);
           assigned = true;
-          
-          // Remove used time slot from available slots for this room/teacher
           this.markSlotAsUsed(bestSlot, timeSlots);
         } else {
           attempts.push({
@@ -166,100 +135,101 @@ class SchedulingAlgorithm {
           });
         }
       }
-      
+
       if (!assigned) {
         console.warn(`Could not assign course: ${course.courseCode}`);
       }
     }
-    
+
     return {
       schedule,
       executionTime: Date.now() - startTime,
       iterations,
-      unassigned: prepared.courses.filter(course => 
+      unassigned: prepared.courses.filter(course =>
         !schedule.some(entry => entry.courseCode === course.courseCode)
       )
     };
   }
 
-  /**
-   * Genetic Algorithm Implementation
-   */
   async geneticAlgorithm(prepared, timeSlots) {
     const startTime = Date.now();
-    
-    // Initialize population
-    let population = this.initializePopulation(prepared, timeSlots);
+
+    // FIX 1: Pass populationSize correctly as first arg
+    let population = this.initializePopulation(this.options.populationSize, prepared, timeSlots);
+
+    // FIX 2: Guard against empty population (e.g. no qualifiedFaculties)
+    if (!population || population.length === 0) {
+      console.warn('⚠️  initializePopulation returned empty — falling back to greedy');
+      return this.greedyAlgorithm(prepared, timeSlots);
+    }
+
     let bestSolution = null;
     let bestFitness = -Infinity;
-    
+
     for (let generation = 0; generation < this.options.maxIterations; generation++) {
-      // Evaluate fitness for each individual
-      const fitnessScores = population.map(individual => 
+      const fitnessScores = population.map(individual =>
         this.calculateFitness(individual, prepared)
       );
-      
-      // Find best solution in this generation
+
       const maxFitnessIndex = fitnessScores.indexOf(Math.max(...fitnessScores));
       if (fitnessScores[maxFitnessIndex] > bestFitness) {
         bestFitness = fitnessScores[maxFitnessIndex];
         bestSolution = [...population[maxFitnessIndex]];
       }
-      
-      // Create next generation
+
       const newPopulation = [];
-      
-      // Elitism - keep best individuals
+
       const eliteCount = Math.floor(this.options.populationSize * 0.1);
       const eliteIndices = fitnessScores
         .map((fitness, index) => ({ fitness, index }))
         .sort((a, b) => b.fitness - a.fitness)
         .slice(0, eliteCount)
         .map(item => item.index);
-      
+
       eliteIndices.forEach(index => {
         newPopulation.push([...population[index]]);
       });
-      
-      // Generate offspring through crossover and mutation
+
       while (newPopulation.length < this.options.populationSize) {
         const parent1 = this.selectParent(population, fitnessScores);
         const parent2 = this.selectParent(population, fitnessScores);
-        
+
         let offspring = this.crossover(parent1, parent2);
+        // FIX 3: mutate now returns the individual
         offspring = this.mutate(offspring, prepared, timeSlots);
-        
+
         newPopulation.push(offspring);
       }
-      
+
       population = newPopulation;
-      
-      // Early termination if perfect solution found
+
       if (bestFitness >= 100) {
         break;
       }
     }
-    
+
+    // FIX 4: Fall back to greedy if genetic produced no solution
+    if (!bestSolution || bestSolution.length === 0) {
+      console.warn('⚠️  Genetic algorithm produced no valid schedule — falling back to greedy');
+      return this.greedyAlgorithm(prepared, timeSlots);
+    }
+
     return {
-      schedule: bestSolution || [],
+      schedule: bestSolution,
       executionTime: Date.now() - startTime,
       iterations: this.options.maxIterations,
       fitness: bestFitness
     };
   }
 
-  /**
-   * Constraint Satisfaction Algorithm Implementation
-   */
   async constraintSatisfactionAlgorithm(prepared, timeSlots) {
     const startTime = Date.now();
     const schedule = [];
     const domains = this.initializeDomains(prepared, timeSlots);
     let iterations = 0;
-    
-    // Backtracking with constraint propagation
+
     const result = this.backtrackSearch(schedule, domains, prepared, timeSlots, iterations);
-    
+
     return {
       schedule: result.schedule,
       executionTime: Date.now() - startTime,
@@ -268,55 +238,46 @@ class SchedulingAlgorithm {
     };
   }
 
-  /**
-   * Validate input data
-   */
   validateInput(input) {
     const errors = [];
-    
+
     if (!input.courses || !Array.isArray(input.courses) || input.courses.length === 0) {
       errors.push('Courses array is required and must not be empty');
     }
-    
+
     if (!input.teachers || !Array.isArray(input.teachers) || input.teachers.length === 0) {
       errors.push('Teachers array is required and must not be empty');
     }
-    
+
     if (!input.rooms || !Array.isArray(input.rooms) || input.rooms.length === 0) {
       errors.push('Rooms array is required and must not be empty');
     }
-    
-    // Validate individual courses
+
+    // FIX 5: Relax course validation — department is optional when sessions are pre-split
     input.courses?.forEach((course, index) => {
       if (!course.courseCode) errors.push(`Course ${index}: courseCode is required`);
       if (!course.credits || course.credits <= 0) errors.push(`Course ${index}: valid credits required`);
-      if (!course.department) errors.push(`Course ${index}: department is required`);
+      // department is NOT required for pre-split sessions
     });
-    
-    // Validate teachers
+
     input.teachers?.forEach((teacher, index) => {
       if (!teacher.teacherId) errors.push(`Teacher ${index}: teacherId is required`);
       if (!teacher.name) errors.push(`Teacher ${index}: name is required`);
-      if (!teacher.department) errors.push(`Teacher ${index}: department is required`);
+      // department is optional
     });
-    
-    // Validate rooms
+
     input.rooms?.forEach((room, index) => {
       if (!room.roomNumber) errors.push(`Room ${index}: roomNumber is required`);
       if (!room.capacity || room.capacity <= 0) errors.push(`Room ${index}: valid capacity required`);
     });
-    
+
     return {
       isValid: errors.length === 0,
       errors
     };
   }
 
-  /**
-   * Prepare data for algorithm processing
-   */
   prepareData(input) {
-    // Normalize and enrich courses
     const courses = input.courses.map(course => ({
       ...course,
       sessionsPerWeek: course.sessionsPerWeek || Math.ceil(course.credits || 3),
@@ -324,8 +285,7 @@ class SchedulingAlgorithm {
       priority: this.calculateCoursePriority(course),
       constraints: course.constraints || {}
     }));
-    
-    // Normalize teachers
+
     const teachers = input.teachers.map(teacher => ({
       ...teacher,
       maxHours: teacher.maxHours || 20,
@@ -333,143 +293,102 @@ class SchedulingAlgorithm {
       availability: teacher.availability || this.getDefaultAvailability(),
       currentLoad: 0
     }));
-    
-    // Normalize rooms
+
     const rooms = input.rooms.map(room => ({
       ...room,
       availability: room.availability || this.getDefaultAvailability(),
       equipment: room.equipment || [],
       isLab: room.isLab || false
     }));
-    
+
     return { courses, teachers, rooms };
   }
 
-  /**
-   * Generate available time slots
-   */
   generateTimeSlots() {
+    // If caller passed exact periods (e.g. real college schedule), use them directly.
+    if (this.options.customTimeSlots && this.options.customTimeSlots.length > 0) {
+      const slots = [];
+      for (const day of this.options.workingDays) {
+        for (const ts of this.options.customTimeSlots) {
+          slots.push({
+            day,
+            startTime: ts.startTime,
+            endTime:   ts.endTime,
+            duration:  this.timeToMinutes(ts.endTime) - this.timeToMinutes(ts.startTime),
+            available: true
+          });
+        }
+      }
+      return slots;
+    }
+
+    // Default: auto-generate from workingHours + timeSlotDuration
     const slots = [];
     const startMinutes = this.timeToMinutes(this.options.workingHours.start);
-    const endMinutes = this.timeToMinutes(this.options.workingHours.end);
-    const slotDuration = this.options.timeSlotDuration;
+    const endMinutes   = this.timeToMinutes(this.options.workingHours.end);
+    const slotDuration  = this.options.timeSlotDuration;
     const breakDuration = this.options.breakDuration;
-    
+
     for (const day of this.options.workingDays) {
       for (let time = startMinutes; time + slotDuration <= endMinutes; time += slotDuration + breakDuration) {
-        const startTime = this.minutesToTime(time);
-        const endTime = this.minutesToTime(time + slotDuration);
-        
         slots.push({
-          day: day,
-          startTime: startTime,
-          endTime: endTime,
-          duration: slotDuration,
+          day,
+          startTime: this.minutesToTime(time),
+          endTime:   this.minutesToTime(time + slotDuration),
+          duration:  slotDuration,
           available: true
         });
       }
     }
-    
+
     return slots;
   }
 
-  /**
-   * Check if assignment is valid
-   */
   isValidAssignment(course, teacher, room, timeSlot, existingSchedule) {
-    // Check teacher availability
-    if (!this.isTeacherAvailable(teacher, timeSlot, existingSchedule)) {
-      return false;
-    }
-    
-    // Check room availability
-    if (!this.isRoomAvailable(room, timeSlot, existingSchedule)) {
-      return false;
-    }
-    
-    // Check room capacity
-    if (room.capacity < (course.maxStudents || course.enrollment || 30)) {
-      return false;
-    }
-    
-    // Check teacher qualifications
-    if (!this.isTeacherQualified(teacher, course)) {
-      return false;
-    }
-    
-    // Check room type requirements
-    if (course.requiresLab && !room.isLab) {
-      return false;
-    }
-    
-    // Check equipment requirements
-    if (course.requiredEquipment && !this.hasRequiredEquipment(room, course.requiredEquipment)) {
-      return false;
-    }
-    
+    if (!this.isTeacherAvailable(teacher, timeSlot, existingSchedule)) return false;
+    if (!this.isRoomAvailable(room, timeSlot, existingSchedule)) return false;
+    if (room.capacity < (course.maxStudents || course.enrollment || 30)) return false;
+    if (!this.isTeacherQualified(teacher, course)) return false;
+    if (course.requiresLab && !room.isLab) return false;
+    if (course.requiredEquipment && !this.hasRequiredEquipment(room, course.requiredEquipment)) return false;
     return true;
   }
 
-  /**
-   * Calculate assignment score for greedy algorithm
-   */
   calculateAssignmentScore(course, teacher, room, timeSlot, schedule, prepared) {
-    let score = 0;
-    
-    // Base score
-    score += 50;
-    
-    // Teacher preference bonus
-    if (teacher.preferences?.departments?.includes(course.department)) {
-      score += 20;
-    }
-    
+    let score = 50;
+
+    if (teacher.preferences?.departments?.includes(course.department)) score += 20;
+
     if (teacher.preferences?.timeSlots) {
-      const prefSlot = teacher.preferences.timeSlots.find(pref => 
+      const prefSlot = teacher.preferences.timeSlots.find(pref =>
         pref.day === timeSlot.day && pref.startTime === timeSlot.startTime
       );
-      if (prefSlot) {
-        score += 15;
-      }
+      if (prefSlot) score += 15;
     }
-    
-    // Room suitability bonus
+
     const capacityUtilization = (course.maxStudents || 30) / room.capacity;
-    if (capacityUtilization >= 0.7 && capacityUtilization <= 0.9) {
-      score += 10; // Good capacity utilization
-    }
-    
-    // Equipment match bonus
+    if (capacityUtilization >= 0.7 && capacityUtilization <= 0.9) score += 10;
+
     if (course.requiredEquipment) {
-      const equipmentMatch = course.requiredEquipment.filter(req => 
+      const equipmentMatch = course.requiredEquipment.filter(req =>
         room.equipment?.includes(req)
       ).length;
       score += equipmentMatch * 5;
     }
-    
-    // Avoid conflicts penalty
-    const teacherConflicts = schedule.filter(entry => 
-      entry.instructor === teacher.teacherId &&
+
+    const teacherConflicts = schedule.filter(entry =>
+      entry.instructor?.toString() === teacher.teacherId?.toString() &&
       entry.day === timeSlot.day &&
       this.timeSlotsOverlap(entry.timeSlot, timeSlot)
     ).length;
-    score -= teacherConflicts * 100; // Heavy penalty for conflicts
-    
-    // Consecutive classes bonus (for same teacher)
-    const consecutiveBonus = this.calculateConsecutiveBonus(teacher, timeSlot, schedule);
-    score += consecutiveBonus;
-    
-    // Lunch time penalty (avoid scheduling during lunch)
-    if (this.isLunchTime(timeSlot)) {
-      score -= 10;
-    }
-    
+    score -= teacherConflicts * 100;
+
+    score += this.calculateConsecutiveBonus(teacher, timeSlot, schedule);
+    if (this.isLunchTime(timeSlot)) score -= 10;
+
     return score;
   }
 
-  /**
-   * Helper methods
-   */
   timeToMinutes(timeString) {
     const [hours, minutes] = timeString.split(':').map(Number);
     return hours * 60 + minutes;
@@ -482,34 +401,31 @@ class SchedulingAlgorithm {
   }
 
   isTeacherAvailable(teacher, timeSlot, schedule) {
-    return !schedule.some(entry => 
-      entry.instructor === teacher.teacherId &&
+    return !schedule.some(entry =>
+      entry.instructor?.toString() === teacher.teacherId?.toString() &&
       entry.day === timeSlot.day &&
       this.timeSlotsOverlap(entry.timeSlot, timeSlot)
     );
   }
 
   isRoomAvailable(room, timeSlot, schedule) {
-    return !schedule.some(entry => 
-      entry.room === room.roomId &&
+    return !schedule.some(entry =>
+      entry.room?.toString() === room.roomId?.toString() &&
       entry.day === timeSlot.day &&
       this.timeSlotsOverlap(entry.timeSlot, timeSlot)
     );
   }
 
+  // FIX 6: isTeacherQualified — compare as strings, and fall back to true
+  // if no qualifiedFaculties are defined (so unassigned courses can still be placed)
   isTeacherQualified(teacher, course) {
-    // Check if teacher's department matches course department
-    if (teacher.department === course.department) {
+    if (!course.qualifiedFaculties || course.qualifiedFaculties.length === 0) {
+      // No restriction — any teacher can teach this course
       return true;
     }
-    
-    // Check specializations
-    if (teacher.specialization?.includes(course.subject) || 
-        teacher.specialization?.includes(course.department)) {
-      return true;
-    }
-    
-    return false;
+    return course.qualifiedFaculties.some(
+      id => id?.toString() === teacher.teacherId?.toString()
+    );
   }
 
   hasRequiredEquipment(room, requiredEquipment) {
@@ -517,23 +433,18 @@ class SchedulingAlgorithm {
   }
 
   timeSlotsOverlap(slot1, slot2) {
+    if (!slot1 || !slot2) return false;
     const start1 = this.timeToMinutes(slot1.startTime);
     const end1 = this.timeToMinutes(slot1.endTime);
     const start2 = this.timeToMinutes(slot2.startTime);
     const end2 = this.timeToMinutes(slot2.endTime);
-    
     return start1 < end2 && start2 < end1;
   }
 
   calculateCoursePriority(course) {
     let priority = course.credits || 3;
-    
-    // Higher priority for required courses
     if (course.isRequired) priority += 5;
-    
-    // Higher priority for higher enrollment
     priority += (course.enrollment || 30) / 10;
-    
     return priority;
   }
 
@@ -565,8 +476,7 @@ class SchedulingAlgorithm {
   }
 
   markSlotAsUsed(assignment, timeSlots) {
-    // This could be implemented to track used slots
-    // For now, conflicts are handled by the validation functions
+    // Conflicts are handled by validation functions
   }
 
   getDefaultAvailability() {
@@ -582,24 +492,16 @@ class SchedulingAlgorithm {
   }
 
   calculateConsecutiveBonus(teacher, timeSlot, schedule) {
-    // Check if teacher has classes before/after this slot
-    const sameDayClasses = schedule.filter(entry => 
-      entry.instructor === teacher.teacherId && entry.day === timeSlot.day
+    const sameDayClasses = schedule.filter(entry =>
+      entry.instructor?.toString() === teacher.teacherId?.toString() &&
+      entry.day === timeSlot.day
     );
-    
-    if (sameDayClasses.length > 0) {
-      return 5; // Small bonus for consecutive classes
-    }
-    
-    return 0;
+    return sameDayClasses.length > 0 ? 5 : 0;
   }
 
   isLunchTime(timeSlot) {
     const startMinutes = this.timeToMinutes(timeSlot.startTime);
-    const lunchStart = this.timeToMinutes('12:00');
-    const lunchEnd = this.timeToMinutes('13:00');
-    
-    return startMinutes >= lunchStart && startMinutes < lunchEnd;
+    return startMinutes >= this.timeToMinutes('12:00') && startMinutes < this.timeToMinutes('13:00');
   }
 
   calculateStatistics(schedule, prepared) {
@@ -608,64 +510,203 @@ class SchedulingAlgorithm {
       totalCourses: new Set(schedule.map(s => s.courseCode)).size,
       totalTeachers: new Set(schedule.map(s => s.instructor)).size,
       totalRooms: new Set(schedule.map(s => s.room)).size,
-      utilizationRate: {
-        teachers: 0,
-        rooms: 0,
-        timeSlots: 0
-      },
-      distribution: {
-        byDay: {},
-        byTimeSlot: {},
-        byDepartment: {}
-      }
+      utilizationRate: { teachers: 0, rooms: 0, timeSlots: 0 },
+      distribution: { byDay: {}, byTimeSlot: {}, byDepartment: {} }
     };
-    
-    // Calculate utilization rates
+
     stats.utilizationRate.teachers = (stats.totalTeachers / prepared.teachers.length * 100).toFixed(2);
     stats.utilizationRate.rooms = (stats.totalRooms / prepared.rooms.length * 100).toFixed(2);
-    
-    // Calculate distributions
+
     this.options.workingDays.forEach(day => {
       stats.distribution.byDay[day] = schedule.filter(s => s.day === day).length;
     });
-    
+
     return stats;
   }
 
-  // Additional methods for genetic algorithm would go here...
-  initializePopulation(prepared, timeSlots) {
-    // Implementation for genetic algorithm initialization
-    return [];
+  // ==========================================
+  // Genetic Algorithm Helper Methods
+  // ==========================================
+
+  // FIX 7: Correct signature — initializePopulation(populationSize, prepared, timeSlots)
+  // FIX 8: Use isLab flag (not room.type) since prepareData maps room.isLab
+  // FIX 9: Gracefully skip courses with no qualifiedFaculties rather than crashing
+  initializePopulation(populationSize, prepared, timeSlots) {
+    const population = [];
+
+    for (let i = 0; i < populationSize; i++) {
+      const individual = [];
+
+      prepared.courses.forEach(course => {
+        // qualifiedFaculties are plain string IDs (from TimetableGenerator).
+        // Fall back to a random teacher if list is empty.
+        let instructorId;
+        if (course.qualifiedFaculties && course.qualifiedFaculties.length > 0) {
+          const picked = course.qualifiedFaculties[
+            Math.floor(Math.random() * course.qualifiedFaculties.length)
+          ];
+          // Handle both plain string and object shapes defensively
+          instructorId = (typeof picked === 'string')
+            ? picked
+            : (picked?.teacherId ?? picked?._id)?.toString();
+        } else {
+          const picked = prepared.teachers[Math.floor(Math.random() * prepared.teachers.length)];
+          instructorId = picked?.teacherId?.toString();
+        }
+
+        // Use isLab flag for room matching
+        const isLab = course.requiresLab || false;
+        const suitableRooms = prepared.rooms.filter(room => room.isLab === isLab);
+        const finalRooms = suitableRooms.length > 0 ? suitableRooms : prepared.rooms;
+        const selectedRoom = finalRooms[Math.floor(Math.random() * finalRooms.length)];
+        const roomId = selectedRoom?.roomId?.toString();
+
+        const selectedSlot = timeSlots[Math.floor(Math.random() * timeSlots.length)];
+
+        individual.push({
+          courseCode: course.courseCode,
+          instructor: instructorId,   // always a plain string ID
+          room: roomId,               // always a plain string ID
+          day: selectedSlot.day,
+          timeSlot: {
+            startTime: selectedSlot.startTime,
+            endTime: selectedSlot.endTime
+          },
+          semester: course.semester
+        });
+      });
+
+      population.push(individual);
+    }
+
+    return population;
   }
 
+  // FIX 10: Use .toString() for all ID comparisons in fitness
   calculateFitness(individual, prepared) {
-    // Implementation for fitness calculation
-    return 0;
+    let fitness = 1000;
+    let hardConflicts = 0;
+    let softConflicts = 0;
+
+    for (let i = 0; i < individual.length; i++) {
+      const entryA = individual[i];
+
+      const courseA = prepared.courses.find(c => c.courseCode === entryA.courseCode);
+      const roomA = prepared.rooms.find(r =>
+        r.roomId?.toString() === entryA.room || r._id?.toString() === entryA.room
+      );
+
+      if (!courseA || !roomA) continue;
+
+      // Teacher qualification check
+      if (courseA.qualifiedFaculties && courseA.qualifiedFaculties.length > 0) {
+        const qualifiedIds = courseA.qualifiedFaculties.map(f =>
+          (f.teacherId || f._id || f)?.toString()
+        );
+        if (!qualifiedIds.includes(entryA.instructor)) {
+          hardConflicts += 2.0;
+        }
+      }
+
+      // Room type matching using isLab
+      const isLabCourse = courseA.requiresLab || false;
+      const isLabRoom = roomA.isLab || false;
+      if (isLabCourse && !isLabRoom) hardConflicts += 1.5;
+      else if (!isLabCourse && isLabRoom) softConflicts += 0.5;
+
+      // Capacity check
+      if (roomA.capacity < 30 && !isLabCourse) softConflicts += 0.3;
+
+      for (let j = i + 1; j < individual.length; j++) {
+        const entryB = individual[j];
+
+        if (entryA.day === entryB.day && this.timeSlotsOverlap(entryA.timeSlot, entryB.timeSlot)) {
+          if (entryA.room === entryB.room) hardConflicts += 1.0;
+          if (entryA.instructor === entryB.instructor) hardConflicts += 1.0;
+
+          const courseB = prepared.courses.find(c => c.courseCode === entryB.courseCode);
+          if (courseA.semester && courseB?.semester && courseA.semester === courseB.semester) {
+            hardConflicts += 1.0;
+          }
+        }
+      }
+    }
+
+    return Math.max(0, fitness / (1 + (hardConflicts * 10) + softConflicts));
   }
 
   selectParent(population, fitnessScores) {
-    // Implementation for parent selection
-    return population[0];
+    const index1 = Math.floor(Math.random() * population.length);
+    const index2 = Math.floor(Math.random() * population.length);
+    return fitnessScores[index1] > fitnessScores[index2]
+      ? population[index1]
+      : population[index2];
   }
 
   crossover(parent1, parent2) {
-    // Implementation for crossover
-    return parent1;
+    const crossoverPoint = Math.floor(parent1.length / 2);
+    return [
+      ...parent1.slice(0, crossoverPoint),
+      ...parent2.slice(crossoverPoint)
+    ];
   }
 
+  // FIX 11: mutate must RETURN the individual
   mutate(individual, prepared, timeSlots) {
-    // Implementation for mutation
-    return individual;
+    if (!individual || individual.length === 0) return individual;
+
+    const mutateIndex = Math.floor(Math.random() * individual.length);
+    // Deep-clone the gene to avoid mutating the parent
+    const gene = { ...individual[mutateIndex], timeSlot: { ...individual[mutateIndex].timeSlot } };
+
+    const courseData = prepared.courses.find(c => c.courseCode === gene.courseCode);
+    if (!courseData) return individual;
+
+    const mutationType = Math.random();
+
+    if (mutationType < 0.33) {
+      // Mutate instructor — qualifiedFaculties are plain string IDs
+      if (courseData.qualifiedFaculties?.length > 0) {
+        const picked = courseData.qualifiedFaculties[Math.floor(Math.random() * courseData.qualifiedFaculties.length)];
+        gene.instructor = (typeof picked === 'string') ? picked : (picked?.teacherId ?? picked?._id)?.toString();
+      } else {
+        const picked = prepared.teachers[Math.floor(Math.random() * prepared.teachers.length)];
+        gene.instructor = picked?.teacherId?.toString();
+      }
+    } else if (mutationType < 0.66) {
+      // FIX 8: Use isLab for room filtering
+      const isLab = courseData.requiresLab || false;
+      const suitableRooms = prepared.rooms.filter(r => r.isLab === isLab);
+      const finalRooms = suitableRooms.length > 0 ? suitableRooms : prepared.rooms;
+      const newRoom = finalRooms[Math.floor(Math.random() * finalRooms.length)];
+      gene.room = (newRoom.roomId || newRoom._id)?.toString();
+    } else {
+      // Mutate time/day
+      const selectedSlot = timeSlots[Math.floor(Math.random() * timeSlots.length)];
+      gene.day = selectedSlot.day;
+      gene.timeSlot = { startTime: selectedSlot.startTime, endTime: selectedSlot.endTime };
+    }
+
+    // Return a new array with the mutated gene
+    const mutated = [...individual];
+    mutated[mutateIndex] = gene;
+    return mutated;
   }
 
-  // Methods for constraint satisfaction algorithm...
+  getRandomDay() {
+    return this.options.workingDays[Math.floor(Math.random() * this.options.workingDays.length)];
+  }
+
+  getRandomTimeSlot() {
+    const slots = this.generateTimeSlots();
+    return slots[Math.floor(Math.random() * slots.length)];
+  }
+
   initializeDomains(prepared, timeSlots) {
-    // Implementation for domain initialization
     return {};
   }
 
   backtrackSearch(schedule, domains, prepared, timeSlots, iterations) {
-    // Implementation for backtracking search
     return { schedule: [], iterations: 0, success: false };
   }
 }

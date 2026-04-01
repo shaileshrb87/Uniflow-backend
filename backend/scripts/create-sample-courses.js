@@ -18,7 +18,7 @@ async function createSampleCourses() {
     const sampleCourses = [
       // Computer Science Department - Semester 1
       {
-        courseCode: 'CS101',
+        coursecoursecode: 'CS101',
         courseName: 'Programming Fundamentals',
         department: 'Computer Science',
         semester: 1,
@@ -31,7 +31,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'CS101L',
+        coursecoursecode: 'CS101L',
         courseName: 'Programming Fundamentals Lab',
         department: 'Computer Science',
         semester: 1,
@@ -39,14 +39,14 @@ async function createSampleCourses() {
         credits: 2,
         hoursPerWeek: 2,
         syllabus: {
-          topics: ['C Programming Exercises', 'Algorithm Implementation', 'Code Debugging'],
+          topics: ['C Programming Exercises', 'Algorithm Implementation', 'coursecode Debugging'],
           syllabusLink: ''
         }
       },
       
       // Computer Science Department - Semester 3
       {
-        courseCode: 'CS301',
+        coursecoursecode: 'CS301',
         courseName: 'Data Structures and Algorithms',
         department: 'Computer Science',
         semester: 3,
@@ -59,7 +59,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'CS301L',
+        coursecoursecode: 'CS301L',
         courseName: 'Data Structures Lab',
         department: 'Computer Science',
         semester: 3,
@@ -72,7 +72,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'CS302',
+        coursecoursecode: 'CS302',
         courseName: 'Database Management Systems',
         department: 'Computer Science',
         semester: 3,
@@ -87,7 +87,7 @@ async function createSampleCourses() {
       
       // Information Technology Department - Semester 1
       {
-        courseCode: 'IT101',
+        coursecoursecode: 'IT101',
         courseName: 'Introduction to Information Technology',
         department: 'Information Technology',
         semester: 1,
@@ -100,7 +100,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'IT102',
+        coursecoursecode: 'IT102',
         courseName: 'Web Technologies',
         department: 'Information Technology',
         semester: 1,
@@ -113,7 +113,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'IT102L',
+        coursecoursecode: 'IT102L',
         courseName: 'Web Technologies Lab',
         department: 'Information Technology',
         semester: 1,
@@ -128,7 +128,7 @@ async function createSampleCourses() {
       
       // Information Technology Department - Semester 3
       {
-        courseCode: 'IT301',
+        coursecoursecode: 'IT301',
         courseName: 'Network Administration',
         department: 'Information Technology',
         semester: 3,
@@ -141,7 +141,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'IT301L',
+        coursecoursecode: 'IT301L',
         courseName: 'Network Administration Lab',
         department: 'Information Technology',
         semester: 3,
@@ -156,7 +156,7 @@ async function createSampleCourses() {
       
       // First Year Department - Semester 1
       {
-        courseCode: 'FY101',
+        coursecoursecode: 'FY101',
         courseName: 'Engineering Mathematics I',
         department: 'First Year',
         semester: 1,
@@ -169,7 +169,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'FY102',
+        coursecoursecode: 'FY102',
         courseName: 'Engineering Physics I',
         department: 'First Year',
         semester: 1,
@@ -182,7 +182,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'FY102L',
+        coursecoursecode: 'FY102L',
         courseName: 'Engineering Physics Lab I',
         department: 'First Year',
         semester: 1,
@@ -195,7 +195,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'FY103',
+        coursecoursecode: 'FY103',
         courseName: 'Engineering Chemistry I',
         department: 'First Year',
         semester: 1,
@@ -208,7 +208,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'FY103L',
+        coursecoursecode: 'FY103L',
         courseName: 'Engineering Chemistry Lab I',
         department: 'First Year',
         semester: 1,
@@ -223,7 +223,7 @@ async function createSampleCourses() {
       
       // First Year Department - Semester 2
       {
-        courseCode: 'FY201',
+        coursecoursecode: 'FY201',
         courseName: 'Engineering Mathematics II',
         department: 'First Year',
         semester: 2,
@@ -236,7 +236,7 @@ async function createSampleCourses() {
         }
       },
       {
-        courseCode: 'FY202',
+        coursecoursecode: 'FY202',
         courseName: 'Engineering Mechanics',
         department: 'First Year',
         semester: 2,
@@ -254,7 +254,7 @@ async function createSampleCourses() {
     for (const courseData of sampleCourses) {
       const course = new Course(courseData);
       await course.save();
-      console.log(`✅ Added course: ${course.courseCode} - ${course.courseName} (${course.department}, Sem ${course.semester})`);
+      console.log(`✅ Added course: ${course.coursecoursecode} - ${course.courseName} (${course.department}, Sem ${course.semester})`);
     }
     
     console.log(`\n🎉 Successfully added ${sampleCourses.length} courses to the database!`);
@@ -265,7 +265,7 @@ async function createSampleCourses() {
       const deptCourses = sampleCourses.filter(c => c.department === dept);
       console.log(`   ${dept}: ${deptCourses.length} courses`);
       deptCourses.forEach(course => {
-        console.log(`     - ${course.courseCode}: ${course.courseName} (${course.courseType}, ${course.hoursPerWeek}h/week)`);
+        console.log(`     - ${course.coursecoursecode}: ${course.courseName} (${course.courseType}, ${course.hoursPerWeek}h/week)`);
       });
     }
     

@@ -1,18 +1,18 @@
 /**
- * Sample Subject Data Generator
- * Creates sample subjects for Mumbai University engineering college
+ * Sample Course Data Generator
+ * Creates sample Courses for Mumbai University engineering college
  */
 
-const Subject = require('../models/Subject');
+const Course = require('../models/Course');
 
 /**
- * Generate comprehensive sample subjects for all departments and semesters
+ * Generate comprehensive sample Courses for all departments and semesters
  */
-const generateSampleSubjects = (adminUserId) => {
+const generateSampleCourses = (adminUserId) => {
   return [
     // Computer Science Department - Year 1
     {
-      code: 'CS101',
+      coursecode: 'CS101',
       name: 'Introduction to Computer Programming',
       credits: 4,
       semester: 1,
@@ -41,7 +41,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'MATH101',
+      coursecode: 'MATH101',
       name: 'Engineering Mathematics I',
       credits: 4,
       semester: 1,
@@ -54,7 +54,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'PHY101',
+      coursecode: 'PHY101',
       name: 'Applied Physics I',
       credits: 3,
       semester: 1,
@@ -67,7 +67,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'CS102',
+      coursecode: 'CS102',
       name: 'Data Structures and Algorithms',
       credits: 4,
       semester: 2,
@@ -82,7 +82,7 @@ const generateSampleSubjects = (adminUserId) => {
     
     // Computer Science Department - Year 2
     {
-      code: 'CS201',
+      coursecode: 'CS201',
       name: 'Object Oriented Programming',
       credits: 4,
       semester: 3,
@@ -95,7 +95,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'CS202',
+      coursecode: 'CS202',
       name: 'Database Management Systems',
       credits: 4,
       semester: 3,
@@ -108,7 +108,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'CS203',
+      coursecode: 'CS203',
       name: 'Computer Networks',
       credits: 3,
       semester: 4,
@@ -123,7 +123,7 @@ const generateSampleSubjects = (adminUserId) => {
     
     // Mechanical Engineering Department
     {
-      code: 'MECH101',
+      coursecode: 'MECH101',
       name: 'Engineering Mechanics',
       credits: 4,
       semester: 1,
@@ -136,7 +136,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'MECH102',
+      coursecode: 'MECH102',
       name: 'Engineering Drawing',
       credits: 3,
       semester: 1,
@@ -149,7 +149,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'MECH201',
+      coursecode: 'MECH201',
       name: 'Thermodynamics',
       credits: 4,
       semester: 3,
@@ -164,7 +164,7 @@ const generateSampleSubjects = (adminUserId) => {
     
     // Electrical Engineering Department
     {
-      code: 'EE101',
+      coursecode: 'EE101',
       name: 'Circuit Analysis',
       credits: 4,
       semester: 1,
@@ -177,7 +177,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'EE102',
+      coursecode: 'EE102',
       name: 'Electrical Machines I',
       credits: 4,
       semester: 3,
@@ -192,7 +192,7 @@ const generateSampleSubjects = (adminUserId) => {
     
     // Information Technology Department
     {
-      code: 'IT101',
+      coursecode: 'IT101',
       name: 'Fundamentals of Information Technology',
       credits: 3,
       semester: 1,
@@ -205,7 +205,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'IT201',
+      coursecode: 'IT201',
       name: 'Web Technologies',
       credits: 4,
       semester: 3,
@@ -220,7 +220,7 @@ const generateSampleSubjects = (adminUserId) => {
     
     // Electronics & Telecommunication Department
     {
-      code: 'EC101',
+      coursecode: 'EC101',
       name: 'Electronic Devices and Circuits',
       credits: 4,
       semester: 1,
@@ -233,7 +233,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'EC201',
+      coursecode: 'EC201',
       name: 'Digital Electronics',
       credits: 4,
       semester: 3,
@@ -248,7 +248,7 @@ const generateSampleSubjects = (adminUserId) => {
     
     // Civil Engineering Department
     {
-      code: 'CE101',
+      coursecode: 'CE101',
       name: 'Building Materials and Construction',
       credits: 4,
       semester: 1,
@@ -261,7 +261,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'CE201',
+      coursecode: 'CE201',
       name: 'Structural Analysis',
       credits: 4,
       semester: 3,
@@ -276,7 +276,7 @@ const generateSampleSubjects = (adminUserId) => {
     
     // Chemical Engineering Department
     {
-      code: 'CHEM101',
+      coursecode: 'CHEM101',
       name: 'Chemical Process Principles',
       credits: 4,
       semester: 1,
@@ -289,7 +289,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'CHEM201',
+      coursecode: 'CHEM201',
       name: 'Fluid Mechanics',
       credits: 4,
       semester: 3,
@@ -304,7 +304,7 @@ const generateSampleSubjects = (adminUserId) => {
     
     // Instrumentation Engineering Department
     {
-      code: 'INST101',
+      coursecode: 'INST101',
       name: 'Measurement and Instrumentation',
       credits: 4,
       semester: 1,
@@ -317,7 +317,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'INST201',
+      coursecode: 'INST201',
       name: 'Control Systems',
       credits: 4,
       semester: 3,
@@ -330,9 +330,9 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     
-    // Common subjects for all departments
+    // Common Courses for all departments
     {
-      code: 'ENG101',
+      coursecode: 'ENG101',
       name: 'English Communication',
       credits: 2,
       semester: 1,
@@ -345,7 +345,7 @@ const generateSampleSubjects = (adminUserId) => {
       createdBy: adminUserId
     },
     {
-      code: 'ENV101',
+      coursecode: 'ENV101',
       name: 'Environmental Studies',
       credits: 2,
       semester: 2,
@@ -363,8 +363,8 @@ const generateSampleSubjects = (adminUserId) => {
 /**
  * Sample CSV data for testing import functionality
  */
-const generateSampleSubjectCSV = () => {
-  return `code,name,department,semester,year,credits,type,description,prerequisites,isActive
+const generateSampleCourseCSV = () => {
+  return `coursecode,name,department,semester,year,credits,type,description,prerequisites,isActive
 CS301,Software Engineering,Computer Science,5,3,4,both,"Software development lifecycle, project management","CS201,CS202",true
 CS302,Artificial Intelligence,Computer Science,5,3,3,theory,"AI fundamentals, machine learning basics",CS201,true
 CS303,Computer Graphics,Computer Science,6,3,3,both,"2D and 3D graphics, OpenGL programming",CS201,true
@@ -373,6 +373,6 @@ EE301,Power Systems,Electrical Engineering,5,3,4,both,"Generation, transmission,
 };
 
 module.exports = {
-  generateSampleSubjects,
-  generateSampleSubjectCSV
+  generateSampleCourses,
+  generateSampleCourseCSV
 };

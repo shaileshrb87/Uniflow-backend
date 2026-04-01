@@ -17,15 +17,15 @@ class SampleDataGenerator {
     
     for (let i = 1; i <= count; i++) {
       const department = this.getRandomElement(this.departments);
-      const deptCode = department.split(' ').map(word => word[0]).join('').toUpperCase();
+      const deptcoursecode = department.split(' ').map(word => word[0]).join('').toUpperCase();
       
       courses.push({
-        courseCode: `${deptCode}${(100 + i).toString()}`,
+        coursecoursecode: `${deptcoursecode}${(100 + i).toString()}`,
         courseName: this.generateCourseName(department),
         credits: this.getRandomElement([2, 3, 4]),
         department: department,
         semester: this.getRandomElement(['fall', 'spring', 'summer']),
-        prerequisites: this.generatePrerequisites(deptCode, i),
+        prerequisites: this.generatePrerequisites(deptcoursecode, i),
         description: `Advanced course in ${department.toLowerCase()}`,
         maxStudents: this.getRandomInt(20, 60),
         sessionType: this.getRandomElement(this.courseTypes),
@@ -202,7 +202,7 @@ class SampleDataGenerator {
     return this.getRandomElement(names);
   }
 
-  generatePrerequisites(deptCode, courseNum) {
+  generatePrerequisites(deptcoursecode, courseNum) {
     if (courseNum <= 5) return []; // Introductory courses have no prerequisites
     
     const prereqCount = this.getRandomInt(0, 2);
@@ -210,7 +210,7 @@ class SampleDataGenerator {
     
     for (let i = 0; i < prereqCount; i++) {
       const prereqNum = this.getRandomInt(100, 100 + courseNum - 1);
-      prereqs.push(`${deptCode}${prereqNum}`);
+      prereqs.push(`${deptcoursecode}${prereqNum}`);
     }
     
     return prereqs;
@@ -381,7 +381,7 @@ class SampleDataGenerator {
       {
         day: 'monday',
         timeSlot: { startTime: '09:00', endTime: '10:00' },
-        course: courses[0].courseCode,
+        course: courses[0].coursecoursecode,
         instructor: teachers[0].teacherId,
         room: rooms[0].roomNumber,
         // This will conflict with the next entry (same teacher, same time)
@@ -389,7 +389,7 @@ class SampleDataGenerator {
       {
         day: 'monday',
         timeSlot: { startTime: '09:00', endTime: '10:00' },
-        course: courses[1].courseCode,
+        course: courses[1].coursecoursecode,
         instructor: teachers[0].teacherId, // Same teacher as above
         room: rooms[1].roomNumber,
         // Teacher conflict
@@ -397,14 +397,14 @@ class SampleDataGenerator {
       {
         day: 'tuesday',
         timeSlot: { startTime: '14:00', endTime: '15:00' },
-        course: courses[2].courseCode,
+        course: courses[2].coursecoursecode,
         instructor: teachers[1].teacherId,
         room: rooms[0].roomNumber,
       },
       {
         day: 'tuesday',
         timeSlot: { startTime: '14:00', endTime: '15:00' },
-        course: courses[3].courseCode,
+        course: courses[3].coursecoursecode,
         instructor: teachers[2].teacherId,
         room: rooms[0].roomNumber, // Same room as above
         // Room conflict

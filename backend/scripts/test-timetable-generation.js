@@ -51,7 +51,7 @@ async function testTimetableGeneration() {
     console.log('\n📖 Sample Semester 1 Sessions (First 5):');
     const sampleSessions = semester1Result.timetable.slice(0, 5);
     sampleSessions.forEach((session, index) => {
-      console.log(`   ${index + 1}. ${session.courseCode} - ${session.courseName}`);
+      console.log(`   ${index + 1}. ${session.coursecoursecode} - ${session.courseName}`);
       console.log(`      📍 ${session.day} ${session.timeSlot.label}`);
       console.log(`      👨‍🏫 Teacher: ${session.teacher.name}`);
       console.log(`      🏫 Room: ${session.room.number} (${session.room.type}, Capacity: ${session.room.capacity})`);
@@ -87,8 +87,8 @@ async function testTimetableGeneration() {
     console.log(`   Semester 3: ${semester3Result.metadata.totalSessions} sessions`);
     
     // Show courses by semester
-    const sem1Courses = [...new Set(semester1Result.timetable.map(s => s.courseCode))];
-    const sem3Courses = [...new Set(semester3Result.timetable.map(s => s.courseCode))];
+    const sem1Courses = [...new Set(semester1Result.timetable.map(s => s.coursecoursecode))];
+    const sem3Courses = [...new Set(semester3Result.timetable.map(s => s.coursecoursecode))];
     
     console.log('\n📚 Courses by Semester:');
     console.log(`   Semester 1 Courses: ${sem1Courses.join(', ')}`);

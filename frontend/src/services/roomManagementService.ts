@@ -46,7 +46,7 @@ export interface Room {
   floor: number;
   capacity: number;
   type: 'classroom' | 'laboratory' | 'lecture_hall' | 'seminar_room' | 'auditorium' | 'library' | 'office' | 'other';
-  department?: string;
+  department?: string | { _id?: string; name?: string; code?: string; coursecode?: string };
   features: string[];
   equipment: Array<{
     name: string;
@@ -182,21 +182,56 @@ export interface PeakHourItem {
   bookingCount: number;
 }
 
+export interface RoomBookingPayload {
+  room: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  purpose: string;
+}
+
+export interface RoomBooking {
+  _id: string;
+  room: string | Room;
+  bookedBy?: {
+    _id?: string;
+    name?: string;
+    email?: string;
+    role?: string;
+  };
+  purpose: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: 'approved' | 'cancelled';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // Room Management Service Class
 // Helper to unwrap mis-ordered ApiResponse instances
 function unwrapRoomData<T>(raw: any): T {
   if (!raw) return raw as T;
-  if (raw.rooms || raw.roomNumber || raw._id) return raw as T; // already object we need
-  if (raw.data && (raw.data.rooms || raw.data.roomNumber || raw.data._id)) return raw.data as T;
+
+  // Standard backend envelope: { success, message, data, ... }
+  if (Object.prototype.hasOwnProperty.call(raw, 'data') && raw.data !== undefined && raw.data !== null) {
+    return raw.data as T;
+  }
+
+  // Already payload object/array
+  if (Array.isArray(raw) || raw.rooms || raw.roomNumber || raw._id) return raw as T;
+
+  // Legacy / mis-ordered envelope fallback
   if (raw.message && typeof raw.message === 'object') {
     const m = raw.message;
-    if (m.rooms || m.roomNumber || m._id || Object.keys(m).length > 1) return m as T;
+    if (Array.isArray(m) || m.rooms || m.roomNumber || m._id || Object.keys(m).length > 1) return m as T;
   }
+
   return raw as T;
 }
 
 class RoomManagementService {
-  
+
   /**
    * Get all rooms with optional filtering and pagination
    */
@@ -223,12 +258,24 @@ class RoomManagementService {
       );
       // Backend pagination nests data differently (rooms + pagination). Map to expected shape.
       const unwrapped = unwrapRoomData<any>(response.data);
+
+      if (Array.isArray(unwrapped)) {
+        return {
+          rooms: unwrapped,
+          totalCount: unwrapped.length,
+          currentPage: 1,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false
+        };
+      }
+
       if (unwrapped.pagination) {
         return {
           rooms: unwrapped.rooms || unwrapped.pagination.rooms || [],
           totalCount: unwrapped.pagination.totalRooms || unwrapped.pagination.totalCount || 0,
           currentPage: unwrapped.pagination.currentPage || 1,
-            totalPages: unwrapped.pagination.totalPages || 1,
+          totalPages: unwrapped.pagination.totalPages || 1,
           hasNextPage: unwrapped.pagination.hasNextPage ?? false,
           hasPrevPage: unwrapped.pagination.hasPrevPage ?? false
         } as PaginatedRooms;
@@ -238,7 +285,7 @@ class RoomManagementService {
       if (axios.isAxiosError(error)) {
         console.error('Error fetching rooms:', {
           status: error.response?.status,
-            statusText: error.response?.statusText,
+          statusText: error.response?.statusText,
           url: error.config?.url,
           params: error.config?.params,
           data: error.response?.data
@@ -269,7 +316,7 @@ class RoomManagementService {
    */
   async createRoom(roomData: Omit<Room, '_id' | 'createdAt' | 'updatedAt'>): Promise<Room> {
     try {
-     
+
       const response: AxiosResponse<any> = await apiClient.post('/rooms', roomData);
       console.log('Creating room with data:', roomData);
       console.log('✅ Room created successfully:', response.data);
@@ -278,7 +325,7 @@ class RoomManagementService {
       console.error('❌ Error creating room:', error);
       console.error('❌ Error response:', error.response?.data);
       console.error('❌ Error status:', error.response?.status);
-      
+
       // Preserve the original error for better debugging
       const errorMessage = error.response?.data?.message || error.message || 'Failed to create room';
       const newError = new Error(errorMessage);
@@ -352,7 +399,25 @@ class RoomManagementService {
   async getRoomStats(): Promise<RoomStats> {
     try {
       const response: AxiosResponse<any> = await apiClient.get('/rooms/stats');
-      return unwrapRoomData<RoomStats>(response.data);
+      const raw = unwrapRoomData<any>(response.data) || {};
+      return {
+        totalRooms: Number(raw.totalRooms || 0),
+        activeRooms: Number(raw.activeRooms || 0),
+        inactiveRooms: Number((raw.totalRooms || 0) - (raw.activeRooms || 0)),
+        availableRooms: Number(raw.availableRooms || 0),
+        unavailableRooms: Number((raw.totalRooms || 0) - (raw.availableRooms || 0)),
+        buildingDistribution: raw.buildingDistribution || {},
+        typeDistribution: raw.typeDistribution || {},
+        departmentDistribution: raw.departmentDistribution || {},
+        capacityDistribution: raw.capacityDistribution || {},
+        averageCapacity: Number(raw.averageCapacity || 0),
+        totalCapacity: Number(raw.totalCapacity || 0),
+        featuresDistribution: raw.featuresDistribution || {},
+        equipmentStats: raw.equipmentStats || {
+          totalEquipment: 0,
+          equipmentByCondition: {}
+        }
+      };
     } catch (error) {
       console.error('Error fetching room statistics:', error);
       throw new Error('Failed to fetch room statistics');
@@ -362,15 +427,23 @@ class RoomManagementService {
   /**
    * Bulk operations on multiple rooms
    */
-  async bulkUpdateRooms(operation: BulkRoomOperation): Promise<{ 
-    success: number; 
-    failed: number; 
-    errors: string[] 
+  async bulkUpdateRooms(operation: BulkRoomOperation): Promise<{
+    success: number;
+    failed: number;
+    errors: string[]
   }> {
     try {
-  // Backend bulk route is /api/rooms/bulk
-  const response = await apiClient.patch('/rooms/bulk', operation);
-      return unwrapRoomData<{ success: number; failed: number; errors: string[] }>(response.data);
+      // Backend bulk route is /api/rooms/bulk
+      const response = await apiClient.patch('/rooms/bulk', operation);
+      const payload = unwrapRoomData<any>(response.data) || {};
+      const total = operation.roomIds.length;
+      const changed = Number(payload.modifiedCount || payload.deletedCount || 0);
+
+      return {
+        success: changed,
+        failed: Math.max(0, total - changed),
+        errors: []
+      };
     } catch (error) {
       console.error('Error performing bulk operation:', error);
       throw new Error('Failed to perform bulk operation');
@@ -394,7 +467,12 @@ class RoomManagementService {
           'Content-Type': 'multipart/form-data',
         },
       });
-      return unwrapRoomData(response.data);
+      const payload = unwrapRoomData<any>(response.data) || {};
+      return {
+        imported: Number(payload.imported || 0),
+        failed: Number(payload.failed || 0),
+        errors: payload.errors || []
+      };
     } catch (error) {
       console.error('Error importing rooms:', error);
       throw new Error('Failed to import rooms');
@@ -592,7 +670,7 @@ class RoomManagementService {
     }
   ): Promise<Room> {
     try {
-      const response: AxiosResponse<any> = await apiClient.patch(
+      const response: AxiosResponse<any> = await apiClient.post(
         `/rooms/${roomId}/maintenance`,
         maintenanceData
       );
@@ -600,6 +678,55 @@ class RoomManagementService {
     } catch (error) {
       console.error('Error scheduling room maintenance:', error);
       throw new Error('Failed to schedule room maintenance');
+    }
+  }
+
+  /**
+   * Create a room booking
+   */
+  async createRoomBooking(payload: RoomBookingPayload): Promise<RoomBooking> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.post('/room-bookings', payload);
+      return unwrapRoomData<RoomBooking>(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMsg = error.response?.data?.message || error.response?.data?.error;
+        throw new Error(backendMsg || 'Failed to create booking');
+      }
+      throw new Error('Failed to create booking');
+    }
+  }
+
+  /**
+   * Get bookings (optionally by room)
+   */
+  async getRoomBookings(roomId?: string): Promise<RoomBooking[]> {
+    try {
+      const params = roomId ? { room: roomId } : undefined;
+      const response: AxiosResponse<any> = await apiClient.get('/room-bookings', { params });
+      return unwrapRoomData<RoomBooking[]>(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMsg = error.response?.data?.message || error.response?.data?.error;
+        throw new Error(backendMsg || 'Failed to fetch bookings');
+      }
+      throw new Error('Failed to fetch bookings');
+    }
+  }
+
+  /**
+   * Cancel a booking
+   */
+  async cancelRoomBooking(id: string): Promise<RoomBooking> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.patch(`/room-bookings/${id}/cancel`);
+      return unwrapRoomData<RoomBooking>(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMsg = error.response?.data?.message || error.response?.data?.error;
+        throw new Error(backendMsg || 'Failed to cancel booking');
+      }
+      throw new Error('Failed to cancel booking');
     }
   }
 }

@@ -30,7 +30,7 @@ async function migrateTeachers() {
     console.log(`\n📋 Found ${departments.length} departments:`);
     const deptMap = {};
     departments.forEach(dept => {
-      console.log(`   - ${dept.name} (${dept.code}) - ID: ${dept._id}`);
+      console.log(`   - ${dept.name} (${dept.coursecode}) - ID: ${dept._id}`);
       deptMap[dept.name] = dept._id;
     });
 

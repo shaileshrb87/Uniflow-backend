@@ -27,10 +27,10 @@ const userSchema = new mongoose.Schema({
     select: false
   },
   role: {
-    type: String,
-    enum: ['student', 'teacher', 'admin'],
-    default: 'student'
-  },
+  type: String,
+  enum: ['student', 'teacher', 'admin'],
+  required: true
+},
   department: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Department',
@@ -49,53 +49,6 @@ const userSchema = new mongoose.Schema({
       return this.role === 'student' || this.role === 'teacher';
     },
     index: true
-  },
-  // Teacher-specific fields
-  employeeId: {
-    type: String,
-    unique: true,
-    sparse: true, // Only unique if not null
-    trim: true,
-    required: function() {
-      return this.role === 'teacher';
-    }
-  },
-  designation: {
-    type: String,
-    enum: ['Professor', 'Associate Professor', 'Assistant Professor', 'Lecturer', null],
-    required: function() {
-      return this.role === 'teacher';
-    }
-  },
-  qualifications: {
-    type: [String],
-    default: []
-  },
-  staffRoom: {
-    type: String,
-    trim: true
-  },
-  workload: {
-    maxHoursPerWeek: { type: Number, default: 18 },
-    minHoursPerWeek: { type: Number, default: 8 }
-  },
-  availability: [{
-    dayOfWeek: { 
-      type: String, 
-      enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] 
-    },
-    startTime: String,
-    endTime: String
-  }],
-  allowedDepartments: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Department'
-  }],
-  performanceRating: {
-    type: Number,
-    min: 1,
-    max: 5,
-    default: null
   },
   isActive: {
     type: Boolean,
@@ -174,20 +127,13 @@ userSchema.virtual('isLocked').get(function() {
 });
 
 // Encrypt password using bcrypt before saving
-userSchema.pre('save', async function(next) {
-  // Only hash the password if it has been modified (or is new)
-  if (!this.isModified('password')) {
-    return next();
-  }
+// Encrypt password before saving
+// ✅ FIXED
+userSchema.pre('save', async function() {
+  if (!this.isModified('password')) return;
 
-  try {
-    // Hash password with cost of 12
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
 // Generate and sign JWT token

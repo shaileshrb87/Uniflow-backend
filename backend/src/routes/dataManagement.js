@@ -37,7 +37,7 @@ router.get('/debug/departments', auth, async (req, res) => {
     res.json({
       success: true,
       count: departments.length,
-      departments: departments.map(d => ({ id: d._id, code: d.code, name: d.name }))
+      departments: departments.map(d => ({ id: d._id, coursecode: d.coursecode, name: d.name }))
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -51,8 +51,8 @@ router.get('/teachers', auth, async (req, res) => {
   try {
     const teachers = await User.find({ role: 'teacher' })
       .select('-password -resetPasswordToken -emailVerificationToken -__v')
-      .populate('department', 'code name')
-      .populate('allowedDepartments', 'code name')
+      .populate('department', 'coursecode name')
+      .populate('allowedDepartments', 'coursecode name')
       .sort({ createdAt: -1 });
     
     res.json({
@@ -112,10 +112,10 @@ router.post('/teachers', auth, async (req, res) => {
       // Debug: Log what we're searching for
       console.log('🔍 Searching for department:', department);
       
-      // First try exact match on code (most common case: IT, CS, FE)
-      let deptDoc = await Department.findOne({ code: department.toUpperCase() });
+      // First try exact match on coursecode (most common case: IT, CS, FE)
+      let deptDoc = await Department.findOne({ coursecode: department.toUpperCase() });
       
-      // If not found by code, try by name
+      // If not found by coursecode, try by name
       if (!deptDoc) {
         deptDoc = await Department.findOne({ 
           name: { $regex: new RegExp(`^${department}$`, 'i') }
@@ -125,10 +125,10 @@ router.post('/teachers', auth, async (req, res) => {
       // Debug: Log available departments
       if (!deptDoc) {
         const allDepts = await Department.find({});
-        console.log('📋 All departments in DB:', allDepts.map(d => ({ code: d.code, name: d.name })));
+        console.log('📋 All departments in DB:', allDepts.map(d => ({ coursecode: d.coursecode, name: d.name })));
         
         const deptList = allDepts.length > 0 
-          ? allDepts.map(d => `${d.code} (${d.name})`).join(', ')
+          ? allDepts.map(d => `${d.coursecode} (${d.name})`).join(', ')
           : 'No departments found in database. Please run seed-departments.js script.';
         return res.status(400).json({
           success: false,
@@ -136,7 +136,7 @@ router.post('/teachers', auth, async (req, res) => {
         });
       }
       
-      console.log('✅ Found department:', deptDoc.code, deptDoc.name);
+      console.log('✅ Found department:', deptDoc.coursecode, deptDoc.name);
       departmentId = deptDoc._id;
     }
 
@@ -175,7 +175,7 @@ router.post('/teachers', auth, async (req, res) => {
     await newTeacher.save();
 
     // Populate department for response
-    await newTeacher.populate('department', 'code name');
+    await newTeacher.populate('department', 'coursecode name');
 
     // Remove password from response
     const teacherResponse = newTeacher.toObject();
@@ -254,7 +254,7 @@ router.post('/rooms', auth, async (req, res) => {
       roomName: roomName || '',
       building: {
         name: building,
-        code: building.substring(0, 3).toUpperCase()
+        coursecode: building.substring(0, 3).toUpperCase()
       },
       capacity: parseInt(capacity),
       roomType: type || 'classroom',
@@ -298,8 +298,8 @@ router.get('/courses', auth, async (req, res) => {
   try {
     const courses = await Course.find()
       .select('-__v')
-      .populate('department', 'code name')
-      .sort({ department: 1, courseCode: 1 });
+      .populate('department', 'coursecode name')
+      .sort({ department: 1, coursecoursecode: 1 });
     
     res.json({
       success: true,
@@ -319,7 +319,7 @@ router.get('/courses', auth, async (req, res) => {
 router.post('/courses', auth, async (req, res) => {
   try {
     const {
-      courseCode,
+      coursecoursecode,
       courseName,
       department,
       credits,
@@ -332,21 +332,21 @@ router.post('/courses', auth, async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!courseCode || !courseName || !department || !credits) {
+    if (!coursecoursecode || !courseName || !department || !credits) {
       return res.status(400).json({
         success: false,
-        error: 'Course code, course name, department, and credits are required'
+        error: 'Course coursecode, course name, department, and credits are required'
       });
     }
 
-    // Convert department code/name to ObjectId
+    // Convert department coursecode/name to ObjectId
     let departmentId = department;
     if (department && !department.match(/^[0-9a-fA-F]{24}$/)) {
       const escapedDept = department.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const deptDoc = await Department.findOne({
         $or: [
           { name: { $regex: new RegExp(`^${escapedDept}$`, 'i') } },
-          { code: { $regex: new RegExp(`^${escapedDept}$`, 'i') } }
+          { coursecode: { $regex: new RegExp(`^${escapedDept}$`, 'i') } }
         ]
       });
       if (!deptDoc) {
@@ -359,16 +359,16 @@ router.post('/courses', auth, async (req, res) => {
     }
 
     // Check if course already exists
-    const existingCourse = await Course.findOne({ courseCode: courseCode.toUpperCase() });
+    const existingCourse = await Course.findOne({ coursecoursecode: coursecoursecode.toUpperCase() });
     if (existingCourse) {
       return res.status(400).json({
         success: false,
-        error: 'Course with this code already exists'
+        error: 'Course with this coursecode already exists'
       });
     }
 
     const newCourse = new Course({
-      courseCode: courseCode.toUpperCase(),
+      coursecoursecode: coursecoursecode.toUpperCase(),
       courseName,
       department: departmentId,
       semester: parseInt(semester) || 1,
@@ -452,7 +452,7 @@ router.post('/teachers/upload', auth, upload.single('file'), async (req, res) =>
         const name = teacherData.name;
         const email = teacherData.email;
         const password = teacherData.password;
-        const deptCode = teacherData.department;
+        const deptcoursecode = teacherData.department;
         const semester = teacherData.semester;
         const employeeId = teacherData.employeeid; // lowercase after cleaning
         const designation = teacherData.designation;
@@ -461,26 +461,26 @@ router.post('/teachers/upload', auth, upload.single('file'), async (req, res) =>
         const maxHoursPerWeek = teacherData.maxhoursperweek; // lowercase after cleaning
         const minHoursPerWeek = teacherData.minhoursperweek; // lowercase after cleaning
 
-        console.log(`👤 Processing row ${processed}:`, { name, email, deptCode, semester, employeeId });
+        console.log(`👤 Processing row ${processed}:`, { name, email, deptcoursecode, semester, employeeId });
 
-        if (!name || !email || !deptCode || !employeeId || !semester) {
+        if (!name || !email || !deptcoursecode || !employeeId || !semester) {
           errors.push(`Row ${processed}: Missing required fields (name, email, department, semester, employeeId)`);
           console.log(`⚠️ Row ${processed}: Missing required fields`);
           continue;
         }
 
-        // Find department by code or name
-        const escapedDept = deptCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Find department by coursecode or name
+        const escapedDept = deptcoursecode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const department = await Department.findOne({
           $or: [
             { name: { $regex: new RegExp(`^${escapedDept}$`, 'i') } },
-            { code: { $regex: new RegExp(`^${escapedDept}$`, 'i') } }
+            { coursecode: { $regex: new RegExp(`^${escapedDept}$`, 'i') } }
           ]
         });
         
         if (!department) {
-          errors.push(`Row ${processed}: Department '${deptCode}' not found`);
-          console.log(`⚠️ Row ${processed}: Department '${deptCode}' not found`);
+          errors.push(`Row ${processed}: Department '${deptcoursecode}' not found`);
+          console.log(`⚠️ Row ${processed}: Department '${deptcoursecode}' not found`);
           continue;
         }
 
@@ -593,7 +593,7 @@ router.get('/rooms/template', auth, (req, res) => {
 
 // Download course template
 router.get('/courses/template', auth, (req, res) => {
-  const template = 'courseCode,title,description,department,credits,hoursPerWeek,semester,prerequisites,roomRequirements\n' +
+  const template = 'coursecoursecode,title,description,department,credits,hoursPerWeek,semester,prerequisites,roomRequirements\n' +
                    'CS101,Programming Fundamentals,Introduction to programming concepts,Computer Science,4,4,fall,,computer_lab\n' +
                    'MATH201,Calculus I,Differential and integral calculus,Mathematics,3,3,fall,MATH101,classroom';
   

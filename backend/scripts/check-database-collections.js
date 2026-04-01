@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('../src/models/User');
 const Teacher = require('../src/models/Teacher');
-const Subject = require('../src/models/Subject');
+const Course = require('../src/models/Course');
 const Course = require('../src/models/Course');
 const Room = require('../src/models/Room');
 
@@ -28,16 +28,16 @@ async function checkCollections() {
       console.log(`   - ${teacher.name} (${teacher.employeeId}) - User: ${teacher.user?.email || 'No user'}`);
     });
     
-    console.log('\n📖 Subjects Collection:', (await Subject.find({})).length, 'records');
-    const subjects = await Subject.find({});
-    subjects.forEach(subject => {
-      console.log(`   - ${subject.name} (${subject.code}) - Dept: ${subject.department}`);
+    console.log('\n📖 Courses Collection:', (await Course.find({})).length, 'records');
+    const Courses = await Course.find({});
+    Courses.forEach(Course => {
+      console.log(`   - ${Course.name} (${Course.coursecode}) - Dept: ${Course.department}`);
     });
     
     console.log('\n📚 Courses Collection:', (await Course.find({})).length, 'records');
     const courses = await Course.find({});
     courses.forEach(course => {
-      console.log(`   - ${course.courseName || course.name} (${course.courseCode || course.code}) - Dept: ${course.department}`);
+      console.log(`   - ${course.courseName || course.name} (${course.coursecoursecode || course.coursecode}) - Dept: ${course.department}`);
     });
     
     console.log('\n🏫 Rooms Collection:', (await Room.find({})).length, 'records');

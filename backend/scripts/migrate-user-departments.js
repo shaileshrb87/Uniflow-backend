@@ -33,7 +33,7 @@ async function migrateDepartments() {
     const departments = await Department.find({});
     console.log(`\n📋 Found ${departments.length} departments:`);
     departments.forEach(dept => {
-      console.log(`   - ${dept.name} (${dept.code}) - ID: ${dept._id}`);
+      console.log(`   - ${dept.name} (${dept.coursecode}) - ID: ${dept._id}`);
     });
 
     // Create a map of department names to ObjectIds

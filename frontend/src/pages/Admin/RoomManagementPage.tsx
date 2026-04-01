@@ -3,27 +3,28 @@
  * Comprehensive admin interface for managing rooms in Mumbai University engineering college
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
-import Button from '../../components/ui/Button';
-import Input from '../../components/ui/Input';
-import Card from '../../components/ui/Card';
-import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import roomManagementService, { 
-  Room, 
-  RoomFilters, 
-  RoomStats, 
-  PaginatedRooms,
-  RoomUtilizationAnalyticsItem,
-  RoomHeatmapResponse,
-  PeakHourItem
-} from '../../services/roomManagementService';
-import { departmentService } from '../../services/departmentService';
-import { Department } from '../../types';
-import { getDepartmentCode, DepartmentType } from '../../constants';
-import { BarChart2, BookPlus, Building2, Users, Building, Plus, Download, SquareChartGantt } from 'lucide-react';
-import UtilizationTable from '../../components/rooms/analytics/UtilizationTable';
+import { BarChart2, BookPlus, Building, Building2, Download, Plus, SquareChartGantt, Users } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useSelector } from 'react-redux';
+import { toast } from 'react-toastify';
 import HeatmapView from '../../components/rooms/analytics/HeatmapView';
-import PeakHoursView from '../../components/rooms/analytics/PeakHoursView';
+import RoomBookingModal, { BookingFormData, RoomBookingSummary } from '../../components/rooms/RoomBookingModal';
+import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import Input from '../../components/ui/Input';
+import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import { DepartmentType, getDepartmentCode } from '../../constants';
+import { departmentService } from '../../services/departmentService';
+import roomManagementService, {
+  PaginatedRooms,
+  Room,
+  RoomBooking,
+  RoomFilters,
+  RoomHeatmapResponse,
+  RoomStats
+} from '../../services/roomManagementService';
+import { RootState } from '../../store';
+import { Department } from '../../types';
 
 // Constants
 const BUILDINGS = [
@@ -65,7 +66,7 @@ const FEATURES = [
 
 const EQUIPMENT_CONDITIONS = [
   'excellent',
-  'good', 
+  'good',
   'needs_repair'
 ];
 
@@ -78,7 +79,7 @@ const RoomManagementPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'rooms' | 'add' | 'import' | 'utilization'>('overview');
-  const [analyticsTab, setAnalyticsTab] = useState<'utilizationTable' | 'heatmap' | 'peakHours'>('utilizationTable');
+  const [analyticsTab, setAnalyticsTab] = useState<'heatmap'>('heatmap');
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,7 +106,7 @@ const RoomManagementPage: React.FC = () => {
     floor: 1,
     capacity: 30,
     type: 'classroom',
-    department: undefined, 
+    department: undefined,
     features: [],
     equipment: [],
     accessibility: {
@@ -134,10 +135,24 @@ const RoomManagementPage: React.FC = () => {
   // Import state
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
-  const [utilizationData, setUtilizationData] = useState<RoomUtilizationAnalyticsItem[]>([]);
   const [heatmapData, setHeatmapData] = useState<RoomHeatmapResponse | null>(null);
-  const [peakHoursData, setPeakHoursData] = useState<PeakHourItem[]>([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  // Booking state
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [bookingData, setBookingData] = useState<BookingFormData>({
+    date: '',
+    startTime: '',
+    endTime: '',
+    purpose: '',
+  });
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [existingBookings, setExistingBookings] = useState<RoomBookingSummary[]>([]);
+  const [existingBookingsLoading, setExistingBookingsLoading] = useState(false);
+
+  const userRole = useSelector((state: RootState) => state.auth.user?.role);
+  const canBookRoom = userRole === 'admin' || userRole === 'teacher';
 
   /**
    * Load rooms with current filters and pagination
@@ -152,7 +167,7 @@ const RoomManagementPage: React.FC = () => {
         'roomNumber',
         'asc'
       );
-      
+
       setRooms(data.rooms);
       setTotalPages(data.totalPages);
       setError(null);
@@ -184,8 +199,13 @@ const RoomManagementPage: React.FC = () => {
       console.log('Loading departments...');
       // Get all departments (not just active ones)
       const depts = await departmentService.getAllDepartments();
-      console.log('Departments loaded:', depts);
-      setDepartments(depts);
+      const normalizedDepartments = Array.isArray(depts)
+        ? depts
+        : Array.isArray((depts as any)?.data)
+          ? (depts as any).data
+          : [];
+      console.log('Departments loaded:', normalizedDepartments);
+      setDepartments(normalizedDepartments);
     } catch (err) {
       console.error('Error loading departments:', err);
       // Fallback to empty array if fetch fails
@@ -211,14 +231,12 @@ const RoomManagementPage: React.FC = () => {
       if (activeTab !== 'utilization') return;
       try {
         setAnalyticsLoading(true);
-        const [utilization, heatmap, peakHours] = await Promise.all([
-          roomManagementService.getRoomUtilization(),
+        const [heatmap] = await Promise.all([
+
           roomManagementService.getRoomHeatmap(),
-          roomManagementService.getRoomPeakHours()
+
         ]);
-        setUtilizationData(Array.isArray(utilization) ? utilization : []);
         setHeatmapData(heatmap);
-        setPeakHoursData(Array.isArray(peakHours) ? peakHours : []);
       } catch (err) {
         console.error('Error loading room analytics:', err);
         setError('Failed to load room analytics');
@@ -257,7 +275,7 @@ const RoomManagementPage: React.FC = () => {
       const newSelection = prev.includes(roomId)
         ? prev.filter(id => id !== roomId)
         : [...prev, roomId];
-      
+
       setSelectAll(newSelection.length === rooms.length);
       return newSelection;
     });
@@ -286,7 +304,7 @@ const RoomManagementPage: React.FC = () => {
       const newFeatures = currentFeatures.includes(feature)
         ? currentFeatures.filter(f => f !== feature)
         : [...currentFeatures, feature];
-      
+
       return { ...prev, features: newFeatures };
     });
   };
@@ -296,7 +314,7 @@ const RoomManagementPage: React.FC = () => {
    */
   const handleAddEquipment = () => {
     if (!newEquipment.name.trim()) return;
-    
+
     setRoomForm(prev => ({
       ...prev,
       equipment: [
@@ -304,7 +322,7 @@ const RoomManagementPage: React.FC = () => {
         { ...newEquipment }
       ]
     }));
-    
+
     setNewEquipment({
       name: '',
       quantity: 1,
@@ -323,11 +341,109 @@ const RoomManagementPage: React.FC = () => {
   };
 
   /**
+   * Booking helpers
+   */
+  const resetBookingState = () => {
+    setBookingData({ date: '', startTime: '', endTime: '', purpose: '' });
+    setSelectedRoom(null);
+    setExistingBookings([]);
+    setExistingBookingsLoading(false);
+    setBookingLoading(false);
+  };
+
+  const loadExistingBookings = async (roomId: string) => {
+    try {
+      setExistingBookingsLoading(true);
+      const bookings: RoomBooking[] = await roomManagementService.getRoomBookings(roomId);
+      const summaries: RoomBookingSummary[] = bookings.map((b) => ({
+        _id: b._id,
+        date: b.date,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        purpose: b.purpose,
+        status: b.status
+      }));
+      setExistingBookings(summaries);
+    } catch (err) {
+      console.error('Error fetching room bookings', err);
+    } finally {
+      setExistingBookingsLoading(false);
+    }
+  };
+
+  const handleOpenBookingModal = async (room: Room) => {
+    setSelectedRoom(room);
+    setBookingData({ date: '', startTime: '', endTime: '', purpose: '' });
+    setIsBookingModalOpen(true);
+    if (room._id) {
+      await loadExistingBookings(room._id);
+    }
+  };
+
+  const handleBookingFieldChange = (field: keyof BookingFormData, value: string) => {
+    setBookingData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const validateBookingForm = () => {
+    if (!bookingData.date || !bookingData.startTime || !bookingData.endTime || !bookingData.purpose.trim()) {
+      toast.error('All booking fields are required');
+      return false;
+    }
+
+    const startMinutes = toMinutes(bookingData.startTime);
+    const endMinutes = toMinutes(bookingData.endTime);
+    if (endMinutes <= startMinutes) {
+      toast.error('End time must be after start time');
+      return false;
+    }
+
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const selectedDate = new Date(bookingData.date + 'T00:00:00');
+    if (selectedDate < startOfToday) {
+      toast.error('Cannot book past dates');
+      return false;
+    }
+
+    return true;
+  };
+
+  const toMinutes = (time: string) => {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const handleSubmitBooking = async () => {
+    if (!selectedRoom || !selectedRoom._id) {
+      toast.error('Please select a room to book');
+      return;
+    }
+
+    if (!validateBookingForm()) return;
+
+    try {
+      setBookingLoading(true);
+      await roomManagementService.createRoomBooking({
+        room: selectedRoom._id,
+        ...bookingData,
+      });
+      toast.success('Room booked successfully');
+      setIsBookingModalOpen(false);
+      resetBookingState();
+    } catch (err: any) {
+      const message = err?.message || 'Failed to create booking';
+      toast.error(message);
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
+  /**
    * Handle room form submission
    */
   const handleSubmitRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
       setError(null);
@@ -338,7 +454,7 @@ const RoomManagementPage: React.FC = () => {
         ...roomForm,
         department: roomForm.department ? getDepartmentCode(roomForm.department as string) as DepartmentType : undefined
       };
-      
+
       if (editingRoom) {
         await roomManagementService.updateRoom(editingRoom._id!, roomData);
         setSuccess('Room updated successfully');
@@ -346,7 +462,7 @@ const RoomManagementPage: React.FC = () => {
         await roomManagementService.createRoom(roomData as Omit<Room, '_id' | 'createdAt' | 'updatedAt'>);
         setSuccess('Room created successfully');
       }
-      
+
       setEditingRoom(null);
       setRoomForm({
         roomNumber: '',
@@ -373,7 +489,7 @@ const RoomManagementPage: React.FC = () => {
         isAvailable: true,
         notes: ''
       });
-      
+
       await loadRooms();
       await loadStats();
       setActiveTab('rooms');
@@ -398,7 +514,7 @@ const RoomManagementPage: React.FC = () => {
    */
   const handleDeleteRoom = async (roomId: string) => {
     if (!window.confirm('Are you sure you want to delete this room?')) return;
-    
+
     try {
       await roomManagementService.deleteRoom(roomId);
       await loadRooms();
@@ -439,13 +555,13 @@ const RoomManagementPage: React.FC = () => {
    */
   const handleBulkOperation = async (action: 'activate' | 'deactivate' | 'delete' | 'makeAvailable' | 'makeUnavailable') => {
     if (selectedRooms.length === 0) return;
-    
-    const confirmMessage = action === 'delete' 
+
+    const confirmMessage = action === 'delete'
       ? `Are you sure you want to delete ${selectedRooms.length} rooms?`
       : `Are you sure you want to ${action.replace(/([A-Z])/g, ' $1').toLowerCase()} ${selectedRooms.length} rooms?`;
-    
+
     if (!window.confirm(confirmMessage)) return;
-    
+
     try {
       await roomManagementService.bulkUpdateRooms({
         roomIds: selectedRooms,
@@ -455,7 +571,7 @@ const RoomManagementPage: React.FC = () => {
           isAvailable: action === 'makeAvailable'
         } : undefined
       });
-      
+
       setSelectedRooms([]);
       setSelectAll(false);
       await loadRooms();
@@ -470,16 +586,16 @@ const RoomManagementPage: React.FC = () => {
    */
   const handleImport = async () => {
     if (!importFile) return;
-    
+
     try {
       setImporting(true);
       const result = await roomManagementService.importRooms(importFile);
-      
+
       alert(`Import completed! Imported: ${result.imported}, Failed: ${result.failed}`);
       if (result.errors.length > 0) {
         console.error('Import errors:', result.errors);
       }
-      
+
       setImportFile(null);
       setActiveTab('rooms');
       await loadRooms();
@@ -541,7 +657,7 @@ const RoomManagementPage: React.FC = () => {
           </div>
         </div>
       </Card>
-      
+
       <Card className="p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -553,7 +669,7 @@ const RoomManagementPage: React.FC = () => {
           </div>
         </div>
       </Card>
-      
+
       <Card className="p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -565,7 +681,7 @@ const RoomManagementPage: React.FC = () => {
           </div>
         </div>
       </Card>
-      
+
       <Card className="p-6">
         <div className="flex items-center justify-between">
           <div>
@@ -653,15 +769,14 @@ const RoomManagementPage: React.FC = () => {
                 Floor {room.floor}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                  room.type === 'classroom' 
-                    ? 'bg-blue-100 text-blue-800'
-                    : room.type === 'laboratory'
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${room.type === 'classroom'
+                  ? 'bg-blue-100 text-blue-800'
+                  : room.type === 'laboratory'
                     ? 'bg-green-100 text-green-800'
                     : room.type === 'lecture_hall'
-                    ? 'bg-purple-100 text-purple-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
+                      ? 'bg-purple-100 text-purple-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
                   {room.type.replace('_', ' ')}
                 </span>
               </td>
@@ -669,24 +784,33 @@ const RoomManagementPage: React.FC = () => {
                 {room.capacity}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                  room.isActive 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
-                }`}>
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${room.isActive
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-red-100 text-red-800'
+                  }`}>
                   {room.isActive ? 'Active' : 'Inactive'}
                 </span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                  room.isAvailable 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-yellow-100 text-yellow-800'
-                }`}>
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${room.isAvailable
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-yellow-100 text-yellow-800'
+                  }`}>
                   {room.isAvailable ? 'Available' : 'Unavailable'}
                 </span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                {canBookRoom && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleOpenBookingModal(room)}
+                    className="bg-indigo-600 text-white hover:bg-indigo-700"
+                  >
+                    <BookPlus className="mr-1 h-4 w-4" />
+                    Book
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   size="sm"
@@ -700,7 +824,12 @@ const RoomManagementPage: React.FC = () => {
                   size="sm"
                   onClick={() => {
                     setEditingRoom(room);
-                    setRoomForm(room);
+                    setRoomForm({
+                      ...room,
+                      department: typeof room.department === 'object'
+                        ? ((room.department as any)?.name || (room.department as any)?.coursecode || (room.department as any)?.code || '')
+                        : (room.department || ''),
+                    });
                     setActiveTab('add');
                   }}
                   className="text-green-600 hover:text-green-900"
@@ -817,11 +946,10 @@ const RoomManagementPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
+              className={`${activeTab === tab.id
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
             >
               <span>{tab.icon}</span>
               <span>{tab.name}</span>
@@ -834,7 +962,7 @@ const RoomManagementPage: React.FC = () => {
       {activeTab === 'overview' && (
         <div>
           {renderStatsCards()}
-          
+
           {/* Building Distribution */}
           {stats?.buildingDistribution && (
             <Card className="p-6 mb-6">
@@ -849,7 +977,7 @@ const RoomManagementPage: React.FC = () => {
               </div>
             </Card>
           )}
-          
+
           {/* Room Type Distribution */}
           {stats?.typeDistribution && (
             <Card className="p-6">
@@ -877,7 +1005,7 @@ const RoomManagementPage: React.FC = () => {
                 value={searchTerm}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearch(e.target.value)}
               />
-              
+
               <select
                 value={filters.building || ''}
                 onChange={(e) => handleFilterChange('building', e.target.value)}
@@ -889,7 +1017,7 @@ const RoomManagementPage: React.FC = () => {
                   <option key={building} value={building}>{building}</option>
                 ))}
               </select>
-              
+
               <select
                 value={filters.type || ''}
                 onChange={(e) => handleFilterChange('type', e.target.value)}
@@ -903,7 +1031,7 @@ const RoomManagementPage: React.FC = () => {
                   </option>
                 ))}
               </select>
-              
+
               <select
                 value={filters.department || ''}
                 onChange={(e) => handleFilterChange('department', e.target.value)}
@@ -911,12 +1039,12 @@ const RoomManagementPage: React.FC = () => {
                 aria-label="Filter by department"
               >
                 <option value="">All Departments</option>
-                {departments.map(dept => (
-                  <option key={dept._id} value={dept._id}>{dept.name} ({dept.code})</option>
+                {(Array.isArray(departments) ? departments : []).map(dept => (
+                  <option key={dept._id} value={dept._id}>{dept.name} ({dept.code || (dept as any).coursecode || '-'})</option>
                 ))}
               </select>
             </div>
-            
+
             {/* Bulk Actions */}
             {selectedRooms.length > 0 && (
               <div className="flex items-center space-x-4 p-4 bg-blue-50 rounded-lg">
@@ -967,7 +1095,7 @@ const RoomManagementPage: React.FC = () => {
           {/* Rooms Table */}
           <Card className="p-6">
             {renderRoomsTable()}
-            
+
             {/* Pagination */}
             <div className="mt-6 flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -989,7 +1117,7 @@ const RoomManagementPage: React.FC = () => {
                   entries
                 </span>
               </div>
-              
+
               <div className="flex items-center space-x-2">
                 <Button
                   size="sm"
@@ -999,11 +1127,11 @@ const RoomManagementPage: React.FC = () => {
                 >
                   Previous
                 </Button>
-                
+
                 <span className="text-sm text-gray-700">
                   Page {currentPage} of {totalPages}
                 </span>
-                
+
                 <Button
                   size="sm"
                   variant="secondary"
@@ -1023,7 +1151,7 @@ const RoomManagementPage: React.FC = () => {
           <h3 className="text-lg font-semibold mb-6">
             {editingRoom ? 'Edit Room' : 'Add New Room'}
           </h3>
-          
+
           <form onSubmit={handleSubmitRoom} className="space-y-6">
             {/* Basic Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1038,7 +1166,7 @@ const RoomManagementPage: React.FC = () => {
                   placeholder="e.g., A101, Lab-CS-01"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Room Name *
@@ -1050,7 +1178,7 @@ const RoomManagementPage: React.FC = () => {
                   placeholder="e.g., Computer Science Lab 1"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Building *
@@ -1068,7 +1196,7 @@ const RoomManagementPage: React.FC = () => {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Floor *
@@ -1082,7 +1210,7 @@ const RoomManagementPage: React.FC = () => {
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoomForm(prev => ({ ...prev, floor: Number(e.target.value) }))}
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Room Type *
@@ -1102,7 +1230,7 @@ const RoomManagementPage: React.FC = () => {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Capacity *
@@ -1116,21 +1244,23 @@ const RoomManagementPage: React.FC = () => {
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoomForm(prev => ({ ...prev, capacity: Number(e.target.value) }))}
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Department
                 </label>
                 <select
-                  value={roomForm.department || ''}
+                  value={typeof roomForm.department === 'object'
+                    ? ((roomForm.department as any)?.name || (roomForm.department as any)?.coursecode || (roomForm.department as any)?.code || '')
+                    : (roomForm.department || '')}
                   onChange={(e) => setRoomForm(prev => ({ ...prev, department: e.target.value }))}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   aria-label="Select department"
                 >
                   <option value="">No specific department</option>
-                  {departments && departments.length > 0 ? (
-                    departments.map(dept => (
-                      <option key={dept._id} value={dept.name}>{dept.name} ({dept.code})</option>
+                  {(Array.isArray(departments) ? departments : []).length > 0 ? (
+                    (Array.isArray(departments) ? departments : []).map(dept => (
+                      <option key={dept._id} value={dept.name}>{dept.name} ({dept.code || (dept as any).coursecode || '-'})</option>
                     ))
                   ) : (
                     <>
@@ -1141,7 +1271,7 @@ const RoomManagementPage: React.FC = () => {
                   )}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Power Outlets
@@ -1218,7 +1348,7 @@ const RoomManagementPage: React.FC = () => {
                     Add
                   </Button>
                 </div>
-                
+
                 {/* Equipment List */}
                 <div className="space-y-2">
                   {(roomForm.equipment || []).map((equipment, index) => (
@@ -1262,7 +1392,7 @@ const RoomManagementPage: React.FC = () => {
                   />
                   <span className="text-sm text-gray-700">Wheelchair Accessible</span>
                 </label>
-                
+
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -1278,7 +1408,7 @@ const RoomManagementPage: React.FC = () => {
                   />
                   <span className="text-sm text-gray-700">Elevator Access</span>
                 </label>
-                
+
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -1294,7 +1424,7 @@ const RoomManagementPage: React.FC = () => {
                   />
                   <span className="text-sm text-gray-700">Disabled Parking</span>
                 </label>
-                
+
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -1328,7 +1458,7 @@ const RoomManagementPage: React.FC = () => {
                   />
                   <span className="text-sm text-gray-700">Air Conditioning</span>
                 </label>
-                
+
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -1338,7 +1468,7 @@ const RoomManagementPage: React.FC = () => {
                   />
                   <span className="text-sm text-gray-700">Projector</span>
                 </label>
-                
+
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -1348,7 +1478,7 @@ const RoomManagementPage: React.FC = () => {
                   />
                   <span className="text-sm text-gray-700">Smart Board</span>
                 </label>
-                
+
                 <label className="flex items-center space-x-2">
                   <input
                     type="checkbox"
@@ -1372,7 +1502,7 @@ const RoomManagementPage: React.FC = () => {
                 />
                 <span className="text-sm font-medium text-gray-700">Active</span>
               </label>
-              
+
               <label className="flex items-center space-x-2">
                 <input
                   type="checkbox"
@@ -1383,7 +1513,7 @@ const RoomManagementPage: React.FC = () => {
                 <span className="text-sm font-medium text-gray-700">Available</span>
               </label>
             </div>
-            
+
             {/* Notes */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1397,7 +1527,7 @@ const RoomManagementPage: React.FC = () => {
                 placeholder="Additional notes about the room..."
               />
             </div>
-            
+
             <div className="flex justify-end space-x-4">
               <Button
                 type="button"
@@ -1420,7 +1550,7 @@ const RoomManagementPage: React.FC = () => {
       {activeTab === 'import' && (
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-6">Import Rooms</h3>
-          
+
           <div className="space-y-6">
             <div>
               <Button
@@ -1434,7 +1564,7 @@ const RoomManagementPage: React.FC = () => {
                 Download the template file to see the required format for importing rooms.
               </p>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select CSV File
@@ -1447,7 +1577,7 @@ const RoomManagementPage: React.FC = () => {
                 aria-label="Select CSV file for room import"
               />
             </div>
-            
+
             {importFile && (
               <div className="p-4 bg-green-50 rounded-lg">
                 <p className="text-sm text-green-800">
@@ -1455,7 +1585,7 @@ const RoomManagementPage: React.FC = () => {
                 </p>
               </div>
             )}
-            
+
             <Button
               onClick={handleImport}
               disabled={!importFile || importing}
@@ -1473,22 +1603,10 @@ const RoomManagementPage: React.FC = () => {
             <h3 className="text-lg font-semibold">Room Utilization Report</h3>
             <div className="inline-flex bg-gray-100 rounded-lg p-1">
               <button
-                className={`px-3 py-1.5 rounded-md text-sm ${analyticsTab === 'utilizationTable' ? 'bg-white shadow text-gray-900' : 'text-gray-600'}`}
-                onClick={() => setAnalyticsTab('utilizationTable')}
-              >
-                Utilization Table
-              </button>
-              <button
-                className={`px-3 py-1.5 rounded-md text-sm ${analyticsTab === 'heatmap' ? 'bg-white shadow text-gray-900' : 'text-gray-600'}`}
+                className="px-3 py-1.5 rounded-md text-sm bg-white shadow text-gray-900"
                 onClick={() => setAnalyticsTab('heatmap')}
               >
                 Heatmap View
-              </button>
-              <button
-                className={`px-3 py-1.5 rounded-md text-sm ${analyticsTab === 'peakHours' ? 'bg-white shadow text-gray-900' : 'text-gray-600'}`}
-                onClick={() => setAnalyticsTab('peakHours')}
-              >
-                Peak Hours
               </button>
             </div>
           </div>
@@ -1499,9 +1617,7 @@ const RoomManagementPage: React.FC = () => {
             </div>
           ) : (
             <>
-              {analyticsTab === 'utilizationTable' && <UtilizationTable data={utilizationData} />}
               {analyticsTab === 'heatmap' && <HeatmapView data={heatmapData} />}
-              {analyticsTab === 'peakHours' && <PeakHoursView data={peakHoursData} />}
             </>
           )}
         </Card>
@@ -1521,7 +1637,7 @@ const RoomManagementPage: React.FC = () => {
                 ✕
               </Button>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Basic Information */}
               <div className="space-y-4">
@@ -1538,7 +1654,7 @@ const RoomManagementPage: React.FC = () => {
                   )}
                 </div>
               </div>
-              
+
               {/* Features & Technology */}
               <div className="space-y-4">
                 <h4 className="font-semibold text-gray-900">Features & Technology</h4>
@@ -1549,7 +1665,7 @@ const RoomManagementPage: React.FC = () => {
                   <div><strong>WiFi:</strong> {showRoomDetails.wifi ? 'Yes' : 'No'}</div>
                   <div><strong>Power Outlets:</strong> {showRoomDetails.powerOutlets}</div>
                 </div>
-                
+
                 {showRoomDetails.features && showRoomDetails.features.length > 0 && (
                   <div>
                     <strong>Additional Features:</strong>
@@ -1563,7 +1679,7 @@ const RoomManagementPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               {/* Equipment */}
               {showRoomDetails.equipment && showRoomDetails.equipment.length > 0 && (
                 <div className="space-y-4">
@@ -1580,7 +1696,7 @@ const RoomManagementPage: React.FC = () => {
                   </div>
                 </div>
               )}
-              
+
               {/* Accessibility */}
               <div className="space-y-4">
                 <h4 className="font-semibold text-gray-900">Accessibility</h4>
@@ -1591,33 +1707,31 @@ const RoomManagementPage: React.FC = () => {
                   <div><strong>Accessible Restroom:</strong> {showRoomDetails.accessibility?.accessibleRestroom ? 'Yes' : 'No'}</div>
                 </div>
               </div>
-              
+
               {/* Status & Notes */}
               <div className="space-y-4 md:col-span-2">
                 <h4 className="font-semibold text-gray-900">Status & Notes</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <strong>Status:</strong>
-                    <span className={`ml-2 px-2 py-1 text-xs rounded-full ${
-                      showRoomDetails.isActive 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
+                    <span className={`ml-2 px-2 py-1 text-xs rounded-full ${showRoomDetails.isActive
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
+                      }`}>
                       {showRoomDetails.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                   <div>
                     <strong>Availability:</strong>
-                    <span className={`ml-2 px-2 py-1 text-xs rounded-full ${
-                      showRoomDetails.isAvailable 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
+                    <span className={`ml-2 px-2 py-1 text-xs rounded-full ${showRoomDetails.isAvailable
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-yellow-100 text-yellow-800'
+                      }`}>
                       {showRoomDetails.isAvailable ? 'Available' : 'Unavailable'}
                     </span>
                   </div>
                 </div>
-                
+
                 {showRoomDetails.notes && (
                   <div>
                     <strong>Notes:</strong>
@@ -1629,6 +1743,21 @@ const RoomManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <RoomBookingModal
+        isOpen={isBookingModalOpen}
+        onClose={() => {
+          setIsBookingModalOpen(false);
+          resetBookingState();
+        }}
+        room={selectedRoom}
+        bookingData={bookingData}
+        onChange={handleBookingFieldChange}
+        onSubmit={handleSubmitBooking}
+        isSubmitting={bookingLoading}
+        existingBookings={existingBookings}
+        isLoadingBookings={existingBookingsLoading}
+      />
     </div>
   );
 };

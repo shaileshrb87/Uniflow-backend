@@ -8,26 +8,26 @@ const router = express.Router();
 const {
   getDepartments,
   getDepartmentById,
-  getDepartmentByCode,
+  getDepartmentBycoursecode,
   createDepartment,
   updateDepartment,
   deleteDepartment,
   activateDepartment,
   getDepartmentStats
 } = require('../controllers/departmentController');
-const { protect } = require('../middleware/auth');
-const { authorize } = require('../middleware/roleAuth');
+const { auth } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roleAuth');
 
 // Public routes
 router.get('/', getDepartments);
-router.get('/code/:code', getDepartmentByCode);
+router.get('/coursecode/:coursecode', getDepartmentBycoursecode);
 router.get('/:id', getDepartmentById);
 router.get('/:id/stats', getDepartmentStats);
 
 // Admin-only routes
-router.post('/', protect, authorize('admin'), createDepartment);
-router.put('/:id', protect, authorize('admin'), updateDepartment);
-router.delete('/:id', protect, authorize('admin'), deleteDepartment);
-router.patch('/:id/activate', protect, authorize('admin'), activateDepartment);
+router.post('/', auth, requireRole('admin'), createDepartment);
+router.put('/:id', auth, requireRole('admin'), updateDepartment);
+router.delete('/:id', auth, requireRole('admin'), deleteDepartment);
+router.patch('/:id/activate', auth, requireRole('admin'), activateDepartment);
 
 module.exports = router;

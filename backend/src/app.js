@@ -17,10 +17,10 @@ const timetableRoutes = require('./routes/timetable');
 const timetableSimpleRoutes = require('./routes/timetableSimple');
 const roomRoutes = require('./routes/roomRoutes');
 const timeSlotRoutes = require('./routes/timeSlotRoutes');
-const subjectRoutes = require('./routes/subjectRoutes');
+const CourseRoutes = require('./routes/CourseRoutes');
 const dataManagementRoutes = require('./routes/dataManagement');
 const departmentRoutes = require('./routes/departmentRoutes');
-
+const meetingRoutes = require('./routes/Meetingroutes');
 
 // Import config
 const config = require('./config/config');
@@ -89,8 +89,9 @@ app.use('/api/timetable', timetableRoutes);
 app.use('/api/timetable', timetableSimpleRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/timeslots', timeSlotRoutes);
-app.use('/api/subjects', subjectRoutes);
+app.use('/api/Courses', CourseRoutes);
 app.use('/api/data', dataManagementRoutes);
+app.use('/api/meetings', meetingRoutes);
 console.log(' All routes mounted successfully');
 
 // 404 handler

@@ -1,13 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Users, Search, Plus, ChevronDown, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Calendar, Loader2 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { dataManagementService } from '../../services/dataManagementService';
-
+import { useNavigate } from 'react-router-dom';
+import Button from '../../components/ui/Button';
 interface Teacher {
   id: string;
   name: string;
   department: string;
   email: string;
   subjects: string[];
+  availability: {
+    dayOfWeek: string;
+    startTime: string;
+    endTime: string;
+  }[];
 }
 
 interface TimeSlot {
@@ -21,7 +28,6 @@ interface Room {
   building: string;
   capacity: number;
 }
-
 interface ScheduleMeetingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -176,11 +182,12 @@ const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
 };
 
 const AdminMyTeachersPage: React.FC = () => {
+  const navigate = useNavigate();
   // State for Scheduling Assistant
   const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [commonSlots, setCommonSlots] = useState<TimeSlot[]>([]);
+  const [loading, setLoading] = useState(false);
   const [searchAttempted, setSearchAttempted] = useState(false);
   const [nextAvailableSlot, setNextAvailableSlot] = useState<{date: string, startTime: string, endTime: string} | null>(null);
   
@@ -190,7 +197,14 @@ const AdminMyTeachersPage: React.FC = () => {
   
   // Teachers data
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [teachersLoading, setTeachersLoading] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'today' | 'recent'>('all');
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [recentSelections, setRecentSelections] = useState<string[]>([]);
 
   // Load teachers on component mount
   useEffect(() => {
@@ -199,6 +213,7 @@ const AdminMyTeachersPage: React.FC = () => {
 
   const fetchTeachers = async () => {
     try {
+      setTeachersLoading(true);
       // Use dataManagementService to fetch teachers
       const teachersData = await dataManagementService.getTeachers();
       
@@ -208,7 +223,8 @@ const AdminMyTeachersPage: React.FC = () => {
         name: teacher.name,
         department: teacher.department || 'Not Assigned',
         email: teacher.email,
-        subjects: teacher.qualifications || []
+        subjects: teacher.qualifications || [],
+        availability: teacher.availability || []
       }));
       
       setTeachers(mappedTeachers);
@@ -216,41 +232,98 @@ const AdminMyTeachersPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching teachers:', error);
       setTeachers([]);
+    } finally {
+      setTeachersLoading(false);
     }
   };
 
+  // Debounce search input
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [searchTerm]);
+
+  const toMinutes = (time: string): number => {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const minutesToTime = (minutes: number): string => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(h)}:${pad(m)}`;
+  };
+
+  const normalizeDepartment = (dept: any): string => {
+    if (!dept) return '';
+    if (typeof dept === 'string') return dept.toLowerCase();
+    if (typeof dept === 'object') {
+      return (dept.name || dept.code || '').toLowerCase();
+    }
+    return '';
+  };
+
   const findCommonSlots = async () => {
-    if (selectedTeachers.length < 2) return;
-    
-    setIsLoading(true);
+    if (selectedTeachers.length < 2) {
+      toast.error('Select at least two teachers');
+      return;
+    }
+
+    if (!selectedDate) {
+      toast.error('Select a date');
+      return;
+    }
+
+    setLoading(true);
     setSearchAttempted(true);
-    
+
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Simulate finding slots or not
-      const hasSlots = Math.random() > 0.3; // 70% chance of finding slots
-      
-      if (hasSlots) {
-        setAvailableSlots([
-          { startTime: '11:30', endTime: '12:30' },
-          { startTime: '14:00', endTime: '16:00' },
-          { startTime: '16:30', endTime: '17:30' }
-        ]);
+      const selectedDay = new Date(selectedDate).toLocaleString('en-US', { weekday: 'long' });
+      const selectedTeacherData = teachers.filter((t) => selectedTeachers.includes(t.id));
+
+      if (selectedTeacherData.length === 0) {
+        setCommonSlots([]);
         setNextAvailableSlot(null);
-      } else {
-        setAvailableSlots([]);
-        setNextAvailableSlot({
-          date: 'Tuesday, Aug 12th',
-          startTime: '15:00',
-          endTime: '16:00'
-        });
+        return;
       }
+
+      let common = selectedTeacherData[0].availability
+        .filter((a) => a.dayOfWeek === selectedDay)
+        .map((slot) => ({ startTime: slot.startTime, endTime: slot.endTime }));
+
+      for (let i = 1; i < selectedTeacherData.length; i++) {
+        const teacherSlots = selectedTeacherData[i].availability
+          .filter((a) => a.dayOfWeek === selectedDay)
+          .map((slot) => ({ startTime: slot.startTime, endTime: slot.endTime }));
+
+        const overlaps: TimeSlot[] = [];
+
+        for (const slotA of common) {
+          for (const slotB of teacherSlots) {
+            const start = Math.max(toMinutes(slotA.startTime), toMinutes(slotB.startTime));
+            const end = Math.min(toMinutes(slotA.endTime), toMinutes(slotB.endTime));
+
+            if (start < end) {
+              overlaps.push({
+                startTime: minutesToTime(start),
+                endTime: minutesToTime(end)
+              });
+            }
+          }
+        }
+
+        common = overlaps;
+        if (common.length === 0) break;
+      }
+
+      setCommonSlots(common);
+      setNextAvailableSlot(null);
     } catch (error) {
       console.error('Error finding common slots:', error);
+      toast.error('Failed to find common slots');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -274,7 +347,7 @@ const AdminMyTeachersPage: React.FC = () => {
       alert('Meeting scheduled successfully!');
       
       // Remove the booked slot from available slots
-      setAvailableSlots(prev => prev.filter(slot => slot !== selectedSlotForBooking));
+      setCommonSlots(prev => prev.filter(slot => slot !== selectedSlotForBooking));
     } catch (error) {
       console.error('Error scheduling meeting:', error);
       alert('Error scheduling meeting. Please try again.');
@@ -290,16 +363,47 @@ const AdminMyTeachersPage: React.FC = () => {
   };
 
   const toggleTeacherSelection = (teacherId: string) => {
-    setSelectedTeachers(prev => 
-      prev.includes(teacherId) 
+    setSelectedTeachers(prev => {
+      const updated = prev.includes(teacherId)
         ? prev.filter(id => id !== teacherId)
-        : [...prev, teacherId]
-    );
+        : [...prev, teacherId];
+
+      if (!recentSelections.includes(teacherId)) {
+        setRecentSelections((rs) => [teacherId, ...rs].slice(0, 10));
+      }
+      return updated;
+    });
   };
 
   const getSelectedTeachersData = () => {
     return teachers.filter(teacher => selectedTeachers.includes(teacher.id));
   };
+
+  const selectedDayName = useMemo(() => selectedDate.toLocaleString('en-US', { weekday: 'long' }), [selectedDate]);
+
+  const filteredTeachers = useMemo(() => {
+    const term = debouncedSearch.toLowerCase();
+    return teachers.filter((teacher) => {
+      const deptNormalized = normalizeDepartment(teacher.department);
+      const matchesTerm = !term ||
+        teacher.name.toLowerCase().includes(term) ||
+        deptNormalized.includes(term) ||
+        (teacher as any).designation?.toLowerCase?.().includes?.(term);
+
+      const matchesFilter = (() => {
+        if (activeFilter === 'all') return true;
+        if (activeFilter === 'today') {
+          return teacher.availability?.some(a => a.dayOfWeek === selectedDayName);
+        }
+        if (activeFilter === 'recent') {
+          return recentSelections.includes(teacher.id);
+        }
+        return true;
+      })();
+
+      return matchesTerm && matchesFilter;
+    });
+  }, [teachers, debouncedSearch, activeFilter, selectedDayName, recentSelections]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -307,193 +411,16 @@ const AdminMyTeachersPage: React.FC = () => {
         
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            My Teachers
-          </h1>
+           <Button variant="outline" className="flex items-center justify-center p-4 h-auto"
+    onClick={() => navigate('/admin/master-timetable')}>
+    <Calendar className="h-5 w-5 mr-2 text-blue-600" />
+    Master Timetables
+  </Button> 
           <p className="text-gray-600 mt-2 text-lg">
             Manage teacher schedules and find common availability slots
           </p>
         </div>
 
-        {/* Scheduling Assistant Card */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6 mb-8">
-          <div className="flex items-center mb-6">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl">
-              <Calendar className="h-6 w-6 text-white" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900 ml-4">Scheduling Assistant</h2>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            {/* Left Side - Controls */}
-            <div className="space-y-6">
-              
-              {/* Teacher Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Teachers *
-                </label>
-                <div className="relative">
-                  <button
-                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="w-full px-4 py-3 text-left bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between"
-                  >
-                    <span className="text-gray-600">
-                      {selectedTeachers.length === 0 
-                        ? "Choose teachers..." 
-                        : `${selectedTeachers.length} teacher${selectedTeachers.length > 1 ? 's' : ''} selected`
-                      }
-                    </span>
-                    <ChevronDown className="h-4 w-4 text-gray-400" />
-                  </button>
-                  
-                  {isDropdownOpen && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {teachers.map(teacher => (
-                        <label
-                          key={teacher.id}
-                          className="flex items-center px-4 py-3 hover:bg-gray-50 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedTeachers.includes(teacher.id)}
-                            onChange={() => toggleTeacherSelection(teacher.id)}
-                            className="mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                            title={`Select ${teacher.name}`}
-                            aria-label={`Select ${teacher.name}`}
-                          />
-                          <div className="flex-1">
-                            <div className="font-medium text-gray-900">{teacher.name}</div>
-                            <div className="text-sm text-gray-500">{typeof teacher.department === 'object' ? (teacher.department as any)?.name || (teacher.department as any)?.code : teacher.department}</div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                
-                {/* Selected Teachers Display */}
-                {selectedTeachers.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {getSelectedTeachersData().map(teacher => (
-                      <span
-                        key={teacher.id}
-                        className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
-                      >
-                        {teacher.name}
-                        <button
-                          onClick={() => toggleTeacherSelection(teacher.id)}
-                          className="ml-2 text-blue-600 hover:text-blue-800"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Date Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Date *
-                </label>
-                <input
-                  type="date"
-                  value={selectedDate.toISOString().split('T')[0]}
-                  onChange={(e) => setSelectedDate(new Date(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  title="Select date for availability search"
-                  aria-label="Select date for availability search"
-                />
-              </div>
-
-              {/* Action Button */}
-              <button
-                onClick={findCommonSlots}
-                disabled={selectedTeachers.length < 2 || isLoading}
-                className="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Searching...</span>
-                  </>
-                ) : (
-                  <>
-                    <Search className="h-5 w-5" />
-                    <span>Find Common Slots</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Right Side - Results */}
-            <div className="bg-gray-50 rounded-xl p-6">
-              {!searchAttempted ? (
-                <div className="text-center py-8">
-                  <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg">
-                    Select teachers and a date to find common availability
-                  </p>
-                </div>
-              ) : isLoading ? (
-                <div className="text-center py-8">
-                  <Loader2 className="h-12 w-12 text-blue-500 mx-auto mb-4 animate-spin" />
-                  <p className="text-gray-600 text-lg">Searching for common slots...</p>
-                </div>
-              ) : availableSlots.length > 0 ? (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <Users className="h-5 w-5 mr-2 text-green-600" />
-                    Available Common Slots
-                  </h3>
-                  <div className="space-y-3">
-                    {availableSlots.map((slot, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <Clock className="h-5 w-5 text-blue-600" />
-                          <span className="font-medium text-gray-900">
-                            {formatTime(slot.startTime)} - {formatTime(slot.endTime)}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleScheduleMeeting(slot)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center space-x-2"
-                        >
-                          <Plus className="h-4 w-4" />
-                          <span>Schedule Meeting</span>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Clock className="h-12 w-12 text-red-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    No common slots found
-                  </h3>
-                  <p className="text-gray-600 mb-4">
-                    No common slots found for the selected teachers on this date.
-                  </p>
-                  {nextAvailableSlot && (
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <p className="text-sm text-blue-700">
-                        <strong>Next available common slot:</strong><br />
-                        {nextAvailableSlot.date} at {formatTime(nextAvailableSlot.startTime)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* Teachers List Section */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">

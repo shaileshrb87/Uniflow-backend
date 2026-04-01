@@ -9,19 +9,19 @@ require('dotenv').config({ path: '../.env' });
 
 const departments = [
   {
-    code: 'IT',
+    coursecode: 'IT',
     name: 'Information Technology',
     description: 'Department of Information Technology - Focuses on software development, networking, and IT infrastructure',
     isActive: true
   },
   {
-    code: 'CS',
+    coursecode: 'CS',
     name: 'Computer Science',
     description: 'Department of Computer Science - Covers algorithms, data structures, AI, and theoretical computer science',
     isActive: true
   },
   {
-    code: 'FE',
+    coursecode: 'FE',
     name: 'First Year Engineering',
     description: 'First Year Engineering - Common foundation year for all engineering students',
     isActive: true
@@ -43,12 +43,12 @@ async function seedDepartments() {
 
     // Insert departments
     for (const dept of departments) {
-      const existing = await Department.findOne({ code: dept.code });
+      const existing = await Department.findOne({ coursecode: dept.coursecode });
       if (existing) {
-        console.log(`⏭️  Department ${dept.code} already exists, skipping...`);
+        console.log(`⏭️  Department ${dept.coursecode} already exists, skipping...`);
       } else {
         await Department.create(dept);
-        console.log(`✅ Created department: ${dept.name} (${dept.code})`);
+        console.log(`✅ Created department: ${dept.name} (${dept.coursecode})`);
       }
     }
 
@@ -58,7 +58,7 @@ async function seedDepartments() {
     const allDepts = await Department.find({});
     console.log('\n📋 Current departments in database:');
     allDepts.forEach(dept => {
-      console.log(`   - ${dept.name} (${dept.code}) - ID: ${dept._id}`);
+      console.log(`   - ${dept.name} (${dept.coursecode}) - ID: ${dept._id}`);
     });
 
     process.exit(0);

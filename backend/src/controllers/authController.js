@@ -8,30 +8,26 @@ const crypto = require('crypto');
 // @route   POST /api/auth/register
 // @access  Public
 const register = asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
 
-  // Validation
   if (!name || !email || !password) {
     throw new ApiError('Please provide name, email, and password', 400);
   }
 
-  // Check if user already exists
   const existingUser = await User.findOne({ email });
   if (existingUser) {
     throw new ApiError('User with this email already exists', 400);
   }
 
-  // Create user
   const user = await User.create({
     name,
     email,
-    password
+    password,
+    role: role || 'student' // fallback if not provided
   });
 
-  // Generate token
   const token = user.getSignedJwtToken();
 
-  // Remove password from response
   const userResponse = user.toObject();
   delete userResponse.password;
 
@@ -44,6 +40,7 @@ const register = asyncHandler(async (req, res) => {
     }
   });
 });
+
 
 // @desc    Login user
 // @route   POST /api/auth/login

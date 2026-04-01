@@ -414,7 +414,6 @@ roomSchema.index({
   roomNumber: 'text',
   name: 'text',
   building: 'text',
-  department: 'text',
   features: 'text'
 });
 
@@ -424,7 +423,9 @@ roomSchema.virtual('fullIdentifier').get(function() {
 });
 
 // Virtual for current occupancy status
+// Virtual for current occupancy status
 roomSchema.virtual('currentOccupancy').get(function() {
+  if (!this.bookings) return 'available'; // ✅ guard
   const now = new Date();
   const currentBooking = this.bookings.find(booking => 
     booking.startTime <= now && 
@@ -436,6 +437,7 @@ roomSchema.virtual('currentOccupancy').get(function() {
 
 // Virtual for upcoming bookings
 roomSchema.virtual('upcomingBookings').get(function() {
+  if (!this.bookings) return []; // ✅ guard
   const now = new Date();
   return this.bookings
     .filter(booking => booking.startTime > now && booking.status === 'approved')
@@ -445,37 +447,28 @@ roomSchema.virtual('upcomingBookings').get(function() {
 
 // Virtual for maintenance status
 roomSchema.virtual('maintenanceStatus').get(function() {
+  if (!this.maintenanceRecords) return 'good'; // ✅ guard
   const now = new Date();
   const activeMaintenances = this.maintenanceRecords.filter(
     record => record.status === 'scheduled' || record.status === 'in_progress'
   );
-  
-  if (activeMaintenances.length > 0) {
-    return 'maintenance_required';
-  }
-  
-  if (this.nextMaintenanceDate && this.nextMaintenanceDate <= now) {
-    return 'maintenance_due';
-  }
-  
+  if (activeMaintenances.length > 0) return 'maintenance_required';
+  if (this.nextMaintenanceDate && this.nextMaintenanceDate <= now) return 'maintenance_due';
   return 'good';
 });
 
 // Virtual for utilization rate (last 30 days)
 roomSchema.virtual('recentUtilizationRate').get(function() {
+  if (!this.utilizationHistory) return 0; // ✅ guard
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
   const recentUtilizations = this.utilizationHistory.filter(
     util => util.date >= thirtyDaysAgo
   );
-  
   if (recentUtilizations.length === 0) return 0;
-  
   const totalRate = recentUtilizations.reduce(
     (sum, util) => sum + util.utilizationRate, 0
   );
-  
   return Math.round(totalRate / recentUtilizations.length);
 });
 

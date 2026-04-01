@@ -8,15 +8,15 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const departmentSchema = new Schema({
-  code: {
+  coursecode: {
     type: String,
-    required: [true, 'Department code is required'],
+    required: [true, 'Department coursecode is required'],
     unique: true,
     trim: true,
     uppercase: true,
     enum: {
       values: ['IT', 'CS', 'FE'],
-      message: 'Department code must be IT, CS, or FE'
+      message: 'Department coursecode must be IT, CS, or FE'
     },
     index: true
   },
@@ -47,7 +47,7 @@ const departmentSchema = new Schema({
 });
 
 // Indexes for performance
-departmentSchema.index({ code: 1 });
+departmentSchema.index({ coursecode: 1 });
 departmentSchema.index({ isActive: 1 });
 
 // Virtual for student count
@@ -67,14 +67,14 @@ departmentSchema.virtual('teacherCount', {
   count: true
 });
 
-// Static method to get department by code
-departmentSchema.statics.getByCode = async function(code) {
-  return this.findOne({ code: code.toUpperCase(), isActive: true });
+// Static method to get department by coursecode
+departmentSchema.statics.getBycoursecode = async function(coursecode) {
+  return this.findOne({ coursecode: coursecode.toUpperCase(), isActive: true });
 };
 
 // Static method to get all active departments
 departmentSchema.statics.getActive = async function() {
-  return this.find({ isActive: true }).sort({ code: 1 });
+  return this.find({ isActive: true }).sort({ coursecode: 1 });
 };
 
 // Instance method to deactivate department
@@ -89,16 +89,16 @@ departmentSchema.methods.activate = async function() {
   return this.save();
 };
 
-// Pre-save validation to ensure code and name match
+// Pre-save validation to ensure coursecode and name match
 departmentSchema.pre('save', function(next) {
-  const codeNameMap = {
+  const coursecodeNameMap = {
     'IT': 'Information Technology',
     'CS': 'Computer Science',
     'FE': 'First Year Engineering'
   };
   
-  if (this.code && this.name && codeNameMap[this.code] !== this.name) {
-    return next(new Error('Department code and name do not match'));
+  if (this.coursecode && this.name && coursecodeNameMap[this.coursecode] !== this.name) {
+    return next(new Error('Department coursecode and name do not match'));
   }
   
   next();

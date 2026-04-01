@@ -30,7 +30,7 @@ function toId(v) {
       rawRoom: s.room,
       rid,
       roomFound: !!room,
-      room: room ? { _id: String(room._id), roomNumber: room.roomNumber, name: room.name, code: room.code } : null
+      room: room ? { _id: String(room._id), roomNumber: room.roomNumber, name: room.name, coursecode: room.coursecode } : null
     });
   }
 

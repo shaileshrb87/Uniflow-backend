@@ -143,7 +143,7 @@ const createTimeSlot = async (req, res) => {
     console.error('Error creating time slot:', error);
     
     // Handle duplicate key error
-    if (error.code === 11000) {
+    if (error.coursecode === 11000) {
       return res.status(400).json({
         success: false,
         error: 'Time slot with same day and time already exists'
@@ -227,7 +227,7 @@ const updateTimeSlot = async (req, res) => {
     console.error('Error updating time slot:', error);
     
     // Handle duplicate key error
-    if (error.code === 11000) {
+    if (error.coursecode === 11000) {
       return res.status(400).json({
         success: false,
         error: 'Time slot with same day and time already exists'

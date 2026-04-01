@@ -38,7 +38,7 @@ const toId = (v) => {
       // Deterministic room assignment based on entry index/day/time
       const key = `${entry.dayOfWeek || ''}-${entry.startTime || ''}-${idx}`;
       let hash = 0;
-      for (let i = 0; i < key.length; i++) hash = ((hash << 5) - hash) + key.charCodeAt(i);
+      for (let i = 0; i < key.length; i++) hash = ((hash << 5) - hash) + key.charcoursecodeAt(i);
       const room = rooms[Math.abs(hash) % rooms.length];
 
       changed = true;

@@ -61,7 +61,7 @@ const getUsers = asyncHandler(async (req, res) => {
     for (let user of users) {
       if (user.department && mongoose.Types.ObjectId.isValid(user.department)) {
         try {
-          const dept = await Department.findById(user.department).select('code name').lean();
+          const dept = await Department.findById(user.department).select('coursecode name').lean();
           user.department = dept;
         } catch (err) {
           console.warn(`Could not populate department for user ${user.email}:`, err.message);
@@ -111,7 +111,7 @@ const getUser = asyncHandler(async (req, res) => {
     if (user.department && mongoose.Types.ObjectId.isValid(user.department)) {
       try {
         const Department = require('../models/Department');
-        const dept = await Department.findById(user.department).select('code name').lean();
+        const dept = await Department.findById(user.department).select('coursecode name').lean();
         user.department = dept;
       } catch (err) {
         console.warn(`Could not populate department for user ${user.email}:`, err.message);
@@ -144,18 +144,9 @@ const createUser = asyncHandler(async (req, res) => {
       department,
       semester,
       isActive = true,
-      profile = {},
-      // Teacher-specific fields
-      employeeId,
-      designation,
-      qualifications = [],
-      staffRoom,
-      workload,
-      availability = [],
-      allowedDepartments = []
+      profile = {}
     } = req.body;
 
-    // Validation
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
@@ -163,15 +154,14 @@ const createUser = asyncHandler(async (req, res) => {
       });
     }
 
-    // Validate department for students and teachers
-    if ((role === 'student' || role === 'teacher') && !department) {
+    // Validate department for student only
+    if (role === 'student' && !department) {
       return res.status(400).json({
         success: false,
-        error: `Department is required for ${role}s`
+        error: 'Department is required for students'
       });
     }
 
-    // Validate semester for students
     if (role === 'student' && !semester) {
       return res.status(400).json({
         success: false,
@@ -179,50 +169,30 @@ const createUser = asyncHandler(async (req, res) => {
       });
     }
 
-    // Validate teacher-specific fields
-    if (role === 'teacher') {
-      if (!employeeId) {
-        return res.status(400).json({
-          success: false,
-          error: 'Employee ID is required for teachers'
-        });
-      }
-      if (!designation) {
-        return res.status(400).json({
-          success: false,
-          error: 'Designation is required for teachers'
-        });
-      }
-    }
-
-    // Convert department name to ObjectId if department is provided
     let departmentId = null;
+
     if (department) {
-      // Check if department is already an ObjectId
-      if (department.match(/^[0-9a-fA-F]{24}$/)) {
+      if (mongoose.Types.ObjectId.isValid(department)) {
         departmentId = department;
       } else {
-        // Escape special regex characters
-        const escapedDept = department.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        
-        // Find department by name or code (case-insensitive)
         const deptDoc = await Department.findOne({
           $or: [
-            { name: { $regex: new RegExp(`^${escapedDept}$`, 'i') } },
-            { code: { $regex: new RegExp(`^${escapedDept}$`, 'i') } }
+            { name: { $regex: new RegExp(`^${department}$`, 'i') } },
+            { coursecode: { $regex: new RegExp(`^${department}$`, 'i') } }
           ]
         });
+
         if (!deptDoc) {
           return res.status(400).json({
             success: false,
             error: `Invalid department: ${department}`
           });
         }
+
         departmentId = deptDoc._id;
       }
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({
@@ -231,13 +201,14 @@ const createUser = asyncHandler(async (req, res) => {
       });
     }
 
-    // Create user object (password will be hashed by pre-save hook)
     const userData = {
       name: name.trim(),
       email: email.toLowerCase().trim(),
-      password: password,
+      password,
       role,
       isActive,
+      department: departmentId,
+      semester,
       profile: {
         firstName: profile.firstName?.trim() || '',
         lastName: profile.lastName?.trim() || '',
@@ -246,80 +217,20 @@ const createUser = asyncHandler(async (req, res) => {
         location: profile.location?.trim() || '',
         website: profile.website?.trim() || ''
       },
-      isEmailVerified: true // Auto-verify for admin-created users
+      isEmailVerified: true
     };
 
-    // Add department if provided (for students and teachers)
-    if (departmentId) {
-      userData.department = departmentId;
-    }
-
-    // Add semester if provided (for students)
-    if (semester) {
-      userData.semester = semester;
-    }
-
-    // Add teacher-specific fields if role is teacher
-    if (role === 'teacher') {
-      userData.employeeId = employeeId;
-      userData.designation = designation;
-      if (qualifications && qualifications.length > 0) {
-        userData.qualifications = qualifications;
-      }
-      if (staffRoom) {
-        userData.staffRoom = staffRoom;
-      }
-      if (workload) {
-        userData.workload = workload;
-      }
-      if (availability && availability.length > 0) {
-        userData.availability = availability;
-      }
-      if (allowedDepartments && allowedDepartments.length > 0) {
-        // Convert department names to ObjectIds if needed
-        const allowedDeptIds = [];
-        for (const dept of allowedDepartments) {
-          if (dept.match && dept.match(/^[0-9a-fA-F]{24}$/)) {
-            allowedDeptIds.push(dept);
-          } else {
-            const escapedDept = dept.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const deptDoc = await Department.findOne({
-              $or: [
-                { name: { $regex: new RegExp(`^${escapedDept}$`, 'i') } },
-                { code: { $regex: new RegExp(`^${escapedDept}$`, 'i') } }
-              ]
-            });
-            if (deptDoc) {
-              allowedDeptIds.push(deptDoc._id);
-            }
-          }
-        }
-        userData.allowedDepartments = allowedDeptIds;
-      }
-    }
-
-    // Create user
     const user = await User.create(userData);
 
-    // Remove password from response
-    let userResponse = await User.findById(user._id)
+    const userResponse = await User.findById(user._id)
       .select('-password')
       .lean();
-
-    // Manually populate department if it's a valid ObjectId
-    if (userResponse.department && mongoose.Types.ObjectId.isValid(userResponse.department)) {
-      try {
-        const dept = await Department.findById(userResponse.department).select('code name').lean();
-        userResponse.department = dept;
-      } catch (err) {
-        console.warn(`Could not populate department:`, err.message);
-      }
-    }
 
     res.status(201).json({
       success: true,
       data: userResponse
     });
+
   } catch (error) {
     console.error('Error creating user:', error);
     res.status(500).json({
@@ -328,7 +239,6 @@ const createUser = asyncHandler(async (req, res) => {
     });
   }
 });
-
 // @desc    Update user
 // @route   PUT /api/users/:id
 // @access  Private (Admin or own profile)
@@ -379,11 +289,11 @@ const updateUser = asyncHandler(async (req, res) => {
         // Escape special regex characters
         const escapedDept = department.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         
-        // Find department by name or code (case-insensitive)
+        // Find department by name or coursecode (case-insensitive)
         const deptDoc = await Department.findOne({
           $or: [
             { name: { $regex: new RegExp(`^${escapedDept}$`, 'i') } },
-            { code: { $regex: new RegExp(`^${escapedDept}$`, 'i') } }
+            { coursecode: { $regex: new RegExp(`^${escapedDept}$`, 'i') } }
           ]
         });
         if (!deptDoc) {
@@ -429,7 +339,7 @@ const updateUser = asyncHandler(async (req, res) => {
     // Manually populate department if it's a valid ObjectId
     if (updatedUser.department && mongoose.Types.ObjectId.isValid(updatedUser.department)) {
       try {
-        const dept = await Department.findById(updatedUser.department).select('code name').lean();
+        const dept = await Department.findById(updatedUser.department).select('coursecode name').lean();
         updatedUser.department = dept;
       } catch (err) {
         console.warn(`Could not populate department:`, err.message);

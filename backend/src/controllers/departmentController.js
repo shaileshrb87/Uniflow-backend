@@ -23,7 +23,7 @@ exports.getDepartments = asyncHandler(async (req, res, next) => {
   }
 
   const departments = await Department.find(filter)
-    .sort({ code: 1 })
+    .sort({ coursecode: 1 })
     .populate('studentCount')
     .populate('teacherCount');
 
@@ -52,12 +52,12 @@ exports.getDepartmentById = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * @desc    Get department by code
- * @route   GET /api/departments/code/:code
+ * @desc    Get department by coursecode
+ * @route   GET /api/departments/coursecode/:coursecode
  * @access  Public
  */
-exports.getDepartmentByCode = asyncHandler(async (req, res, next) => {
-  const department = await Department.getByCode(req.params.code);
+exports.getDepartmentBycoursecode = asyncHandler(async (req, res, next) => {
+  const department = await Department.getBycoursecode(req.params.coursecode);
 
   if (!department) {
     return next(new ApiError(404, 'Department not found'));
@@ -74,30 +74,30 @@ exports.getDepartmentByCode = asyncHandler(async (req, res, next) => {
  * @access  Admin only
  */
 exports.createDepartment = asyncHandler(async (req, res, next) => {
-  const { code, name, description, isActive } = req.body;
+  const { coursecode, name, description, isActive } = req.body;
 
   // Check if department already exists
   const existingDept = await Department.findOne({ 
-    $or: [{ code: code.toUpperCase() }, { name }] 
+    $or: [{ coursecode: coursecode.toUpperCase() }, { name }] 
   });
 
   if (existingDept) {
-    return next(new ApiError(400, 'Department with this code or name already exists'));
+    return next(new ApiError(400, 'Department with this coursecode or name already exists'));
   }
 
-  // Validate code and name match
-  const codeNameMap = {
+  // Validate coursecode and name match
+  const coursecodeNameMap = {
     'IT': 'Information Technology',
     'CS': 'Computer Science',
     'FE': 'First Year Engineering'
   };
 
-  if (codeNameMap[code.toUpperCase()] !== name) {
-    return next(new ApiError(400, 'Department code and name do not match'));
+  if (coursecodeNameMap[coursecode.toUpperCase()] !== name) {
+    return next(new ApiError(400, 'Department coursecode and name do not match'));
   }
 
   const department = await Department.create({
-    code: code.toUpperCase(),
+    coursecode: coursecode.toUpperCase(),
     name,
     description,
     isActive
@@ -123,7 +123,7 @@ exports.updateDepartment = asyncHandler(async (req, res, next) => {
   }
 
   // Only allow updating description and isActive
-  // Code and name should not be changed to maintain data integrity
+  // coursecode and name should not be changed to maintain data integrity
   if (description !== undefined) {
     department.description = description;
   }
@@ -193,10 +193,9 @@ exports.getDepartmentStats = asyncHandler(async (req, res, next) => {
   // Import models here to avoid circular dependencies
   const User = require('../models/User');
   const Course = require('../models/Course');
-  const Subject = require('../models/Subject');
   const Room = require('../models/Room');
 
-  const [studentCount, teacherCount, courseCount, subjectCount, roomCount] = await Promise.all([
+  const [studentCount, teacherCount, courseCount, CourseCount, roomCount] = await Promise.all([
     User.countDocuments({ department: department._id, role: 'student', isActive: true }),
     User.countDocuments({ 
       role: 'teacher',
@@ -206,13 +205,13 @@ exports.getDepartmentStats = asyncHandler(async (req, res, next) => {
       ]
     }),
     Course.countDocuments({ department: department._id }),
-    Subject.countDocuments({ department: department._id }),
+    Course.countDocuments({ department: department._id }),
     Room.countDocuments({ department: department._id })
   ]);
 
   const stats = {
     department: {
-      code: department.code,
+      coursecode: department.coursecode,
       name: department.name,
       isActive: department.isActive
     },
@@ -220,7 +219,7 @@ exports.getDepartmentStats = asyncHandler(async (req, res, next) => {
       students: studentCount,
       teachers: teacherCount,
       courses: courseCount,
-      subjects: subjectCount,
+      Courses: CourseCount,
       rooms: roomCount
     }
   };

@@ -34,10 +34,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/uniflow', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(process.env.DATABASE_URL)
 .then(() => {
   console.log('✅ Connected to MongoDB');
 })
@@ -59,31 +56,38 @@ const authRoutes = require('./src/routes/authRoutes');
 const timetableRoutes = require('./src/routes/timetable');
 const dataManagementRoutes = require('./src/routes/dataManagement');
 const userRoutes = require('./src/routes/userRoutes');
-const subjectRoutes = require('./src/routes/subjectRoutes');
+const CourseRoutes = require('./src/routes/CourseRoutes');
 const roomRoutes = require('./src/routes/roomRoutes');
 const timeSlotRoutes = require('./src/routes/timeSlotRoutes');
-
+const departmentRoutes = require("./src/routes/departmentRoutes")
+const teacherRoutes = require("./src/routes/teacherRoutes");
+const meetingRoutes = require('./src/routes/Meetingroutes');
 // Use routes
 console.log('🔧 Mounting API routes...');
 app.use('/api/auth', authRoutes);
 app.use('/api/timetable', timetableRoutes);
 app.use('/api/data', dataManagementRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/subjects', subjectRoutes);
+app.use('/api/Courses', CourseRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/timeslots', timeSlotRoutes);
-
+app.use('/api/departments', departmentRoutes);  
+app.use('/api/teachers', teacherRoutes);
+app.use('/api/meetings', meetingRoutes);
+app.use('/api/teachers', require('./src/routes/teacherRoutes'));
+app.use('/api/swaps', require('./src/routes/Swaproutes'));
+app.use('/api/absences', require('./src/routes/absence'));
 // Serve static files from React build (for production)
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'public')));
   
   // Handle React routing, return all requests to React app
-  app.get('*', (req, res) => {
+  app.get('/(.*)', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   });
 } else {
   // Development fallback
-  app.use('*', (req, res) => {
+  app.use( (req, res) => {
     res.status(404).json({
       success: false,
       error: 'Route not found'

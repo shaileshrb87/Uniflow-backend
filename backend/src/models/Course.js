@@ -4,13 +4,15 @@ const Schema = mongoose.Schema;
 // 3. Course Schema (Refined)
 // Detailed course structure aligned with university standards.
 const courseSchema = new Schema({
-    courseCode: {
+   courseCode: {
         type: String,
         required: [true, 'Course code is required.'],
         unique: true,
         trim: true,
+        uppercase: true // Automatically store as uppercase
     },
-    courseName: {
+    // FIXED: Renamed from courseName to name
+    name: {
         type: String,
         required: [true, 'Course name is required.'],
         trim: true,
@@ -26,7 +28,7 @@ const courseSchema = new Schema({
         type: String,
         enum: ['Computer Science', 'Information Technology', 'First Year'],
     },
-    semester: { // Which semester the course belongs to
+    semester: { 
         type: Number,
         required: true,
         min: 1,
@@ -35,8 +37,12 @@ const courseSchema = new Schema({
     courseType: {
         type: String,
         required: true,
-        enum: ['Theory', 'Practical', 'Tutorial'],
+        enum: ['Theory', 'Lab', 'Tutorial'], 
     },
+qualifiedFaculties: [{ 
+    type: Schema.Types.ObjectId, 
+    ref: 'User' 
+}],
     credits: {
         type: Number,
         required: [true, 'Credits are required.'],
@@ -49,12 +55,44 @@ const courseSchema = new Schema({
         topics: [String],
         syllabusLink: { type: String, trim: true } // Link to official university syllabus PDF
     },
+
+year: {
+  type: Number,
+  min: 1,
+  max: 4
+},
+
+type: {
+  type: String,
+  enum: ['theory', 'lab', 'tutorial'],
+  default: 'theory'
+},
+
+isActive: {
+  type: Boolean,
+  default: true
+},
+
+prerequisites: [{
+  type: String,
+  trim: true
+}],
+
+createdBy: {
+  type: Schema.Types.ObjectId,
+  ref: 'User'
+},
+
+updatedBy: {
+  type: Schema.Types.ObjectId,
+  ref: 'User'
+},
     // assignedTeacher is now part of the TimetableEntry, not the course itself,
     // as different teachers might take the same course for different divisions.
 }, { timestamps: true });
 
 // Indexes for performance
-courseSchema.index({ courseCode: 1 });
+courseSchema.index({ coursecode: 1 });
 courseSchema.index({ department: 1 });
 courseSchema.index({ semester: 1 });
 courseSchema.index({ courseType: 1 });

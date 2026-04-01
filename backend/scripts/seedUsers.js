@@ -6,9 +6,9 @@
 const mongoose = require('mongoose');
 const config = require('../src/config/config');
 const User = require('../src/models/User');
-const Subject = require('../src/models/Subject');
+const Course = require('../src/models/Course');
 const { generateSampleUsers, generateUserStats } = require('../utils/sampleUserData');
-const { generateSampleSubjects } = require('../utils/sampleSubjectData');
+const { generateSampleCourses } = require('../utils/sampleCourseData');
 
 /**
  * Connect to database
@@ -29,7 +29,7 @@ const connectDB = async () => {
 const clearData = async () => {
   try {
     await User.deleteMany({});
-    await Subject.deleteMany({});
+    await Course.deleteMany({});
     console.log('🗑️ Cleared existing data');
   } catch (error) {
     console.error('❌ Error clearing data:', error.message);
@@ -62,34 +62,34 @@ const seedUsers = async () => {
 };
 
 /**
- * Seed subjects into database
+ * Seed Courses into database
  */
-const seedSubjects = async () => {
+const seedCourses = async () => {
   try {
     // Get the first admin user for createdBy field
     const adminUser = await User.findOne({ role: 'admin' });
     if (!adminUser) {
-      console.log('⚠️ No admin user found, skipping subject seeding');
+      console.log('⚠️ No admin user found, skipping Course seeding');
       return;
     }
 
-    const sampleSubjects = generateSampleSubjects(adminUser._id);
+    const sampleCourses = generateSampleCourses(adminUser._id);
     
-    for (const subjectData of sampleSubjects) {
-      const existingSubject = await Subject.findOne({ code: subjectData.code });
+    for (const CourseData of sampleCourses) {
+      const existingCourse = await Course.findOne({ coursecode: CourseData.coursecode });
       
-      if (!existingSubject) {
-        const subject = new Subject(subjectData);
-        await subject.save();
-        console.log(`✅ Created subject: ${subject.code} - ${subject.name}`);
+      if (!existingCourse) {
+        const Course = new Course(CourseData);
+        await Course.save();
+        console.log(`✅ Created Course: ${Course.coursecode} - ${Course.name}`);
       } else {
-        console.log(`⚠️ Subject already exists: ${subjectData.code}`);
+        console.log(`⚠️ Course already exists: ${CourseData.coursecode}`);
       }
     }
     
-    console.log('🎉 Subject seeding completed successfully!');
+    console.log('🎉 Course seeding completed successfully!');
   } catch (error) {
-    console.error('❌ Error seeding subjects:', error.message);
+    console.error('❌ Error seeding Courses:', error.message);
   }
 };
 /**
@@ -103,10 +103,10 @@ const displaySummary = async () => {
     const teacherUsers = await User.countDocuments({ role: 'teacher' });
     const studentUsers = await User.countDocuments({ role: 'student' });
     
-    const totalSubjects = await Subject.countDocuments();
-    const activeSubjects = await Subject.countDocuments({ isActive: true });
-    const csSubjects = await Subject.countDocuments({ department: 'Computer Science' });
-    const mechSubjects = await Subject.countDocuments({ department: 'Mechanical Engineering' });
+    const totalCourses = await Course.countDocuments();
+    const activeCourses = await Course.countDocuments({ isActive: true });
+    const csCourses = await Course.countDocuments({ department: 'Computer Science' });
+    const mechCourses = await Course.countDocuments({ department: 'Mechanical Engineering' });
     
     console.log('\n📊 Database Summary:');
     console.log('   === USERS ===');
@@ -116,11 +116,11 @@ const displaySummary = async () => {
     console.log(`   Teacher Users: ${teacherUsers}`);
     console.log(`   Student Users: ${studentUsers}`);
     
-    console.log('\n   === SUBJECTS ===');
-    console.log(`   Total Subjects: ${totalSubjects}`);
-    console.log(`   Active Subjects: ${activeSubjects}`);
-    console.log(`   CS Subjects: ${csSubjects}`);
-    console.log(`   Mechanical Subjects: ${mechSubjects}`);
+    console.log('\n   === CourseS ===');
+    console.log(`   Total Courses: ${totalCourses}`);
+    console.log(`   Active Courses: ${activeCourses}`);
+    console.log(`   CS Courses: ${csCourses}`);
+    console.log(`   Mechanical Courses: ${mechCourses}`);
     
     console.log('\n👥 Sample Login Credentials:');
     console.log('   Admin: rajesh.kumar@mu.edu.in / password123');
@@ -145,11 +145,11 @@ const main = async () => {
   // await clearData();
   
   await seedUsers();
-  await seedSubjects();
+  await seedCourses();
   await displaySummary();
   
   console.log('\n✨ Seeding process completed!');
-  console.log('You can now test the User and Subject Management pages with the sample data.\n');
+  console.log('You can now test the User and Course Management pages with the sample data.\n');
   
   // Close database connection
   await mongoose.connection.close();
@@ -176,4 +176,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { main, seedUsers, seedSubjects, clearData };
+module.exports = { main, seedUsers, seedCourses, clearData };

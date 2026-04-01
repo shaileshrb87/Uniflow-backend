@@ -2,20 +2,20 @@
  * Standard API response format
  */
 class ApiResponse {
-  constructor(success, message, data = null, statusCode = 200) {
+  constructor(success, message, data = null, statuscoursecode = 200) {
     this.success = success;
     this.message = message;
     this.data = data;
-    this.statusCode = statusCode;
+    this.statuscoursecode = statuscoursecode;
     this.timestamp = new Date().toISOString();
   }
 
-  static success(message, data = null, statusCode = 200) {
-    return new ApiResponse(true, message, data, statusCode);
+  static success(message, data = null, statuscoursecode = 200) {
+    return new ApiResponse(true, message, data, statuscoursecode);
   }
 
-  static error(message, statusCode = 500) {
-    return new ApiResponse(false, message, null, statusCode);
+  static error(message, statuscoursecode = 500) {
+    return new ApiResponse(false, message, null, statuscoursecode);
   }
 }
 

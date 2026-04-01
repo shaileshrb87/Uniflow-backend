@@ -102,7 +102,7 @@ This script performs the following operations:
    - Users: Links to department ObjectId
    - Teachers: Sets primaryDepartment and allowedDepartments
    - Courses: Converts department string to ObjectId reference
-   - Subjects: Converts department string to ObjectId reference
+   - Course: Converts department string to ObjectId reference
    - Rooms: Converts department string to ObjectId reference
 
 **How to run:**
@@ -213,7 +213,7 @@ Response:
     "students": 120,
     "teachers": 15,
     "courses": 24,
-    "subjects": 24,
+    "Course": 24,
     "rooms": 8
   }
 }

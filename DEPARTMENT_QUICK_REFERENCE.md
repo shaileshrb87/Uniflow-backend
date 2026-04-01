@@ -154,9 +154,9 @@ const subject = await Subject.create({
 });
 ```
 
-### Filter Subjects by Department
+### Filter Course by Department
 ```http
-GET /api/subjects?department=<departmentId>
+GET /api/Course?department=<departmentId>
 ```
 
 ## Timetable Generation with Departments
@@ -219,7 +219,7 @@ node scripts/migrate-departments.js
    Departments created: 3
    Teachers migrated: 15
    Courses migrated: 48
-   Subjects migrated: 48
+   Course migrated: 48
    Rooms migrated: 12
 ============================================================
 ✅ Migration completed successfully!
@@ -263,7 +263,7 @@ const departmentDisplay = (dept: string | Department) => {
    - primaryDepartment: required
    - allowedDepartments: optional (for cross-teaching)
 
-3. **Courses/Subjects:**
+3. **Courses/Course:**
    - department: required
 
 4. **Rooms:**

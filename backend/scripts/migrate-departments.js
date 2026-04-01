@@ -4,7 +4,7 @@
  * This script:
  * 1. Seeds the 3 default departments (IT, CS, FE) if they don't exist
  * 2. Migrates existing string-based department fields to ObjectId references
- * 3. Updates Users, Teachers, Courses, Subjects, and Rooms
+ * 3. Updates Users, Teachers, Courses, Courses, and Rooms
  * 
  * Run this script once after deploying the department model changes
  * 
@@ -20,15 +20,15 @@ const Department = require('../src/models/Department');
 const User = require('../src/models/User');
 const Teacher = require('../src/models/Teacher');
 const Course = require('../src/models/Course');
-const Subject = require('../src/models/Subject');
+const Course = require('../src/models/Course');
 const Room = require('../src/models/Room');
 
 // Department mapping
 const DEPARTMENT_MAP = {
-  'Computer Science': { code: 'CS', name: 'Computer Science' },
-  'Information Technology': { code: 'IT', name: 'Information Technology' },
-  'First Year': { code: 'FE', name: 'First Year Engineering' },
-  'First Year Engineering': { code: 'FE', name: 'First Year Engineering' }
+  'Computer Science': { coursecode: 'CS', name: 'Computer Science' },
+  'Information Technology': { coursecode: 'IT', name: 'Information Technology' },
+  'First Year': { coursecode: 'FE', name: 'First Year Engineering' },
+  'First Year Engineering': { coursecode: 'FE', name: 'First Year Engineering' }
 };
 
 // Connect to database
@@ -49,19 +49,19 @@ async function seedDepartments() {
   
   const departments = [
     {
-      code: 'IT',
+      coursecode: 'IT',
       name: 'Information Technology',
       description: 'Information Technology department offering courses in software development, networking, and IT infrastructure.',
       isActive: true
     },
     {
-      code: 'CS',
+      coursecode: 'CS',
       name: 'Computer Science',
       description: 'Computer Science department focusing on algorithms, data structures, AI, and theoretical computer science.',
       isActive: true
     },
     {
-      code: 'FE',
+      coursecode: 'FE',
       name: 'First Year Engineering',
       description: 'Common department for first-year engineering students (Semester 1-2) from IT and CS branches.',
       isActive: true
@@ -72,18 +72,18 @@ async function seedDepartments() {
   
   for (const dept of departments) {
     try {
-      const existing = await Department.findOne({ code: dept.code });
+      const existing = await Department.findOne({ coursecode: dept.coursecode });
       
       if (existing) {
-        console.log(`   ⚠️  Department ${dept.code} already exists, skipping...`);
-        createdDepts[dept.code] = existing;
+        console.log(`   ⚠️  Department ${dept.coursecode} already exists, skipping...`);
+        createdDepts[dept.coursecode] = existing;
       } else {
         const newDept = await Department.create(dept);
-        console.log(`   ✅ Created department: ${dept.code} - ${dept.name}`);
-        createdDepts[dept.code] = newDept;
+        console.log(`   ✅ Created department: ${dept.coursecode} - ${dept.name}`);
+        createdDepts[dept.coursecode] = newDept;
       }
     } catch (error) {
-      console.error(`   ❌ Error creating department ${dept.code}:`, error.message);
+      console.error(`   ❌ Error creating department ${dept.coursecode}:`, error.message);
     }
   }
   
@@ -133,14 +133,14 @@ async function migrateTeachers(departments) {
       const deptInfo = DEPARTMENT_MAP[teacher.department];
       
       if (deptInfo) {
-        const dept = departments[deptInfo.code];
+        const dept = departments[deptInfo.coursecode];
         
         if (dept) {
           teacher.primaryDepartment = dept._id;
           teacher.allowedDepartments = [];
           
           // FE teachers can also teach IT and CS (cross-teaching)
-          if (deptInfo.code === 'FE') {
+          if (deptInfo.coursecode === 'FE') {
             teacher.allowedDepartments = [
               departments['IT']._id,
               departments['CS']._id
@@ -149,7 +149,7 @@ async function migrateTeachers(departments) {
           
           await teacher.save();
           migratedCount++;
-          console.log(`   ✅ Migrated teacher ${teacher.name}: ${teacher.department} -> ${deptInfo.code}`);
+          console.log(`   ✅ Migrated teacher ${teacher.name}: ${teacher.department} -> ${deptInfo.coursecode}`);
         }
       } else {
         console.log(`   ⚠️  Unknown department for teacher ${teacher.name}: ${teacher.department}`);
@@ -183,7 +183,7 @@ async function migrateCourses(departments) {
       const deptInfo = DEPARTMENT_MAP[course.department];
       
       if (deptInfo) {
-        const dept = departments[deptInfo.code];
+        const dept = departments[deptInfo.coursecode];
         
         if (dept) {
           course.departmentLegacy = course.department; // Save old value
@@ -191,10 +191,10 @@ async function migrateCourses(departments) {
           
           await course.save();
           migratedCount++;
-          console.log(`   ✅ Migrated course ${course.courseCode}: ${course.departmentLegacy} -> ${deptInfo.code}`);
+          console.log(`   ✅ Migrated course ${course.coursecoursecode}: ${course.departmentLegacy} -> ${deptInfo.coursecode}`);
         }
       } else {
-        console.log(`   ⚠️  Unknown department for course ${course.courseCode}: ${course.department}`);
+        console.log(`   ⚠️  Unknown department for course ${course.coursecoursecode}: ${course.department}`);
         errorCount++;
       }
     } catch (error) {
@@ -207,40 +207,40 @@ async function migrateCourses(departments) {
   return { migratedCount, errorCount };
 }
 
-// Migrate Subjects
-async function migrateSubjects(departments) {
-  console.log('\n📖 Migrating Subjects...');
+// Migrate Courses
+async function migrateCourses(departments) {
+  console.log('\n📖 Migrating Courses...');
   
-  const subjects = await Subject.find({
+  const Courses = await Course.find({
     department: { $type: 'string' } // Only string-type departments
   });
   
-  console.log(`   Found ${subjects.length} subjects to migrate`);
+  console.log(`   Found ${Courses.length} Courses to migrate`);
   
   let migratedCount = 0;
   let errorCount = 0;
   
-  for (const subject of subjects) {
+  for (const Course of Courses) {
     try {
-      const deptInfo = DEPARTMENT_MAP[subject.department];
+      const deptInfo = DEPARTMENT_MAP[Course.department];
       
       if (deptInfo) {
-        const dept = departments[deptInfo.code];
+        const dept = departments[deptInfo.coursecode];
         
         if (dept) {
-          subject.departmentLegacy = subject.department; // Save old value
-          subject.department = dept._id; // Set new ObjectId reference
+          Course.departmentLegacy = Course.department; // Save old value
+          Course.department = dept._id; // Set new ObjectId reference
           
-          await subject.save();
+          await Course.save();
           migratedCount++;
-          console.log(`   ✅ Migrated subject ${subject.code}: ${subject.departmentLegacy} -> ${deptInfo.code}`);
+          console.log(`   ✅ Migrated Course ${Course.coursecode}: ${Course.departmentLegacy} -> ${deptInfo.coursecode}`);
         }
       } else {
-        console.log(`   ⚠️  Unknown department for subject ${subject.code}: ${subject.department}`);
+        console.log(`   ⚠️  Unknown department for Course ${Course.coursecode}: ${Course.department}`);
         errorCount++;
       }
     } catch (error) {
-      console.error(`   ❌ Error migrating subject ${subject._id}:`, error.message);
+      console.error(`   ❌ Error migrating Course ${Course._id}:`, error.message);
       errorCount++;
     }
   }
@@ -267,7 +267,7 @@ async function migrateRooms(departments) {
       const deptInfo = DEPARTMENT_MAP[room.department];
       
       if (deptInfo) {
-        const dept = departments[deptInfo.code];
+        const dept = departments[deptInfo.coursecode];
         
         if (dept) {
           room.departmentLegacy = room.department; // Save old value
@@ -275,7 +275,7 @@ async function migrateRooms(departments) {
           
           await room.save();
           migratedCount++;
-          console.log(`   ✅ Migrated room ${room.roomNumber}: ${room.departmentLegacy} -> ${deptInfo.code}`);
+          console.log(`   ✅ Migrated room ${room.roomNumber}: ${room.departmentLegacy} -> ${deptInfo.coursecode}`);
         }
       } else {
         console.log(`   ⚠️  Skipping room ${room.roomNumber}: ${room.department} (not in IT/CS/FE)`);
@@ -305,7 +305,7 @@ async function runMigration() {
     const userStats = await migrateUsers(departments);
     const teacherStats = await migrateTeachers(departments);
     const courseStats = await migrateCourses(departments);
-    const subjectStats = await migrateSubjects(departments);
+    const CourseStats = await migrateCourses(departments);
     const roomStats = await migrateRooms(departments);
     
     // Print summary
@@ -316,7 +316,7 @@ async function runMigration() {
     console.log(`   Users migrated: ${userStats.migratedCount}`);
     console.log(`   Teachers migrated: ${teacherStats.migratedCount}`);
     console.log(`   Courses migrated: ${courseStats.migratedCount}`);
-    console.log(`   Subjects migrated: ${subjectStats.migratedCount}`);
+    console.log(`   Courses migrated: ${CourseStats.migratedCount}`);
     console.log(`   Rooms migrated: ${roomStats.migratedCount}`);
     console.log('=' .repeat(60));
     console.log('✅ Migration completed successfully!\n');
