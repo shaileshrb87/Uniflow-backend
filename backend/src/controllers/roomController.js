@@ -40,6 +40,40 @@ const normalizeDay = (dayValue) => {
   return normalized;
 };
 
+const createRoomBooking = asyncHandler(async (req, res) => {
+  const room = await Room.findById(req.params.id);
+  if (!room) throw new ApiError(404, 'Room not found');
+
+  const { purpose, startTime, endTime, notes } = req.body;
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+
+  if (room.isBookedAt(start, end)) {
+    throw new ApiError(409, 'Room is already booked for this time slot');
+  }
+
+  room.bookings.push({
+    userId: req.user._id,
+    purpose, startTime: start, endTime: end,
+    status: 'pending', notes
+  });
+
+  await room.save();
+  res.status(201).json(new ApiResponse(true, 'Booking request submitted', room, 201));
+});
+
+const updateBookingStatus = asyncHandler(async (req, res) => {
+  const room = await Room.findById(req.params.id);
+  const booking = room.bookings.id(req.params.bookingId);
+  if (!booking) throw new ApiError(404, 'Booking not found');
+
+  booking.status = req.body.status; // 'approved' | 'rejected' | 'cancelled'
+  booking.approvedBy = req.user._id;
+  await room.save();
+
+  res.status(200).json(new ApiResponse(true, `Booking ${req.body.status}`, booking, 200));
+});
+
 const getSchedulingDimensions = async () => {
   const activeSlots = await TimeSlot.find({ isActive: true })
     .select('dayOfWeek startTime endTime')
@@ -699,14 +733,6 @@ const getRoomHeatmap = asyncHandler(async (_req, res) => {
           from: 'courses',
           localField: 'schedule.course',
           foreignField: '_id',
-          as: 'courseDoc'
-        }
-      },
-      {
-        $lookup: {
-          from: 'courses',
-          localField: 'schedule.course',
-          foreignField: '_id',
           as: 'CourseDoc'
         }
       },
@@ -748,6 +774,56 @@ const getRoomHeatmap = asyncHandler(async (_req, res) => {
       }
     ])
   ]);
+  const getRoomBookings = asyncHandler(async (req, res) => {
+  const { status, startDate, endDate } = req.query;
+
+  const room = await Room.findById(req.params.id)
+    .populate('bookings.userId', 'name email')
+    .lean();
+
+  if (!room) {
+    throw new ApiError(404, 'Room not found');
+  }
+
+  let bookings = room.bookings || [];
+
+  // 🔍 Filter by status (optional)
+  if (status) {
+    const allowedStatus = ['pending', 'approved', 'rejected', 'cancelled'];
+    if (!allowedStatus.includes(status)) {
+      throw new ApiError(400, 'Invalid booking status');
+    }
+    bookings = bookings.filter(b => b.status === status);
+  }
+
+  // 📅 Filter by date range (optional)
+  if (startDate || endDate) {
+    const start = startDate ? new Date(startDate) : new Date(0);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    bookings = bookings.filter(b => {
+      return new Date(b.startTime) >= start && new Date(b.endTime) <= end;
+    });
+  }
+
+  // ⏳ Sort by latest booking first
+  bookings.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+
+  res.status(200).json(
+    new ApiResponse(
+      true,
+      'Room bookings retrieved successfully',
+      {
+        roomId: room._id,
+        roomName: room.name,
+        roomNumber: room.roomNumber,
+        totalBookings: bookings.length,
+        bookings
+      },
+      200
+    )
+  );
+});
 
   const days = dimensions.days;
   const timeSlots = dimensions.timeSlots;
@@ -1210,5 +1286,8 @@ module.exports = {
   getMaintenanceSchedule,
   importRooms,
   exportRooms,
-  getRoomTemplate
+  getRoomTemplate,
+  updateBookingStatus ,
+  createRoomBooking,
+  getRoomBookings
 };

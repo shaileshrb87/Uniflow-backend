@@ -24,7 +24,10 @@ const {
   getMaintenanceSchedule,
   importRooms,
   exportRooms,
-  getRoomTemplate
+  getRoomTemplate,
+  updateBookingStatus,
+  createRoomBooking,
+  getRoomBookings,
 } = require('../controllers/roomController');
 const { auth, authorize } = require('../middleware/auth');
 
@@ -77,6 +80,9 @@ router.patch('/bulk', authorize('admin'), bulkUpdateRooms);
 
 // Import route with file upload
 router.post('/import', authorize('admin'), upload.single('file'), importRooms);
+router.post('/:id/bookings', auth, createRoomBooking);
+router.patch('/:id/bookings/:bookingId', authorize('admin'), updateBookingStatus);
+router.get('/:id/bookings', auth, getRoomBookings);
 
 // Standard CRUD routes
 router.route('/')
