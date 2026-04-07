@@ -14,6 +14,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import {
+  Zap, ArrowLeft, AlertCircle, BookOpen, FlaskConical, Building2,
+  Calendar, Clock3, Users2, Layers, GraduationCap, X, Loader2, CheckCircle2,
+  ChevronDown, Info
+} from 'lucide-react';
 
 const API = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -75,14 +80,14 @@ const ALL_SLOTS = [
 ];
 
 const PALETTE = [
-  { bg: '#05172e', border: '#2563eb', text: '#93c5fd', pill: '#1e3a6e' },
-  { bg: '#052e1a', border: '#16a34a', text: '#86efac', pill: '#14532d' },
-  { bg: '#1e0d30', border: '#7c3aed', text: '#c4b5fd', pill: '#3b0764' },
-  { bg: '#2e1a05', border: '#c2410c', text: '#fdba74', pill: '#431407' },
-  { bg: '#1a0d22', border: '#be185d', text: '#f9a8d4', pill: '#500724' },
-  { bg: '#04242e', border: '#0e7490', text: '#67e8f9', pill: '#083344' },
-  { bg: '#1e1905', border: '#a16207', text: '#fde68a', pill: '#451a03' },
-  { bg: '#1a0a0a', border: '#b91c1c', text: '#fca5a5', pill: '#450a0a' },
+  { bg: '#EFF6FF', border: '#3B82F6', text: '#1D4ED8', badge: '#DBEAFE' },
+  { bg: '#F0FDF4', border: '#22C55E', text: '#15803D', badge: '#DCFCE7' },
+  { bg: '#FDF4FF', border: '#A855F7', text: '#7E22CE', badge: '#F3E8FF' },
+  { bg: '#FFF7ED', border: '#F97316', text: '#C2410C', badge: '#FFEDD5' },
+  { bg: '#FFF1F2', border: '#F43F5E', text: '#BE123C', badge: '#FFE4E6' },
+  { bg: '#F0FDFA', border: '#14B8A6', text: '#0F766E', badge: '#CCFBF1' },
+  { bg: '#FFFBEB', border: '#EAB308', text: '#A16207', badge: '#FEF9C3' },
+  { bg: '#F5F3FF', border: '#8B5CF6', text: '#6D28D9', badge: '#F3E8FF' },
 ];
 const colorCache: Record<string, typeof PALETTE[0]> = {};
 let ci = 0;
@@ -401,7 +406,7 @@ const TimetableGenerationPage: React.FC = () => {
 
           {/* Info note */}
           <div style={P.infoNote}>
-            ℹ️ No manual teacher assignment needed. Teachers are auto-selected from each course's <code style={{ background: '#0d1e38', padding: '1px 4px', borderRadius: 3 }}>qualifiedFaculties</code> field with load balancing.
+            ℹ️ No manual teacher assignment needed. Teachers are auto-selected from each course's field with load balancing.
           </div>
 
           {/* Summary */}
@@ -599,29 +604,45 @@ const SessionCard: React.FC<{ session: Session; onDragStart: () => void; onClick
   const c    = courseColor(session.courseCode);
   const isLab = session.type === 'lab';
   return (
-    <div
+    <button
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      className="session-card"
-      style={{ background: c.bg, borderLeft: `3px solid ${c.border}`, borderRadius: 7, padding: '8px 9px', marginBottom: 3, cursor: 'grab', userSelect: 'none' }}
+      className="tt-card"
+      aria-label={`Session: ${session.courseCode} - ${session.courseName}. Teacher: ${session.teacherName}. Room: ${session.roomNumber}. Type: ${session.type}`}
+      title={`${session.courseCode}: ${session.courseName}\nTeacher: ${session.teacherName}\nRoom: ${session.roomNumber}`}
+      style={{ 
+        background: c.bg, 
+        borderLeft: `3px solid ${c.border}`,
+        border: `1px solid ${c.border}30`,
+        borderLeftWidth: 3,
+        borderLeftColor: c.border,
+        borderRadius: 8, 
+        padding: '8px 10px', 
+        marginBottom: 4, 
+        cursor: 'grab', 
+        userSelect: 'none',
+        width: '100%',
+        textAlign: 'left',
+        display: 'block',
+      }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: c.text, fontFamily: 'monospace', letterSpacing: '0.3px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: c.text, fontFamily: "'DM Mono', monospace", letterSpacing: '-.2px', minWidth: 0 }}>
           {session.courseCode}
         </span>
-        <span style={{ fontSize: 8, fontWeight: 700, background: c.pill, color: c.text, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>
-          {isLab ? 'LAB' : 'LEC'}{session.batch ? ` · ${session.batch}` : ''}
+        <span style={{ fontSize: 8, fontWeight: 700, background: c.badge, color: c.text, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '.2px' }}>
+          {isLab ? '🧪' : '📖'} {session.type.toUpperCase()}{session.batch ? ` · ${session.batch}` : ''}
         </span>
       </div>
-      <div style={{ fontSize: 10, color: '#6b85a0', marginTop: 3, lineHeight: 1.3 }}>
-        {(session.courseName || '').slice(0, 22)}{(session.courseName || '').length > 22 ? '…' : ''}
+      <div style={{ fontSize: 10, color: '#374151', marginTop: 4, lineHeight: 1.3, fontWeight: 500 }}>
+        {session.courseName && session.courseName.length > 26 ? session.courseName.slice(0, 26) + '…' : session.courseName}
       </div>
-      <div style={{ fontSize: 9, color: '#374151', marginTop: 4, fontFamily: 'monospace' }}>
-        👤 {(session.teacherName || '').split(' ')[0]}
-        {session.roomNumber ? ` · 🚪 ${session.roomNumber}` : ''}
+      <div style={{ display: 'flex', gap: 8, marginTop: 5, fontSize: 9, color: '#6B7280' }}>
+        <span>👤 {(session.teacherName || 'N/A').split(' ')[0]}</span>
+        {session.roomNumber && <span>🚪 {session.roomNumber}</span>}
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -630,32 +651,64 @@ const SessionCard: React.FC<{ session: Session; onDragStart: () => void; onClick
 // ─────────────────────────────────────────────────────────────────────────────
 const DetailModal: React.FC<{ session: Session; onClose: () => void }> = ({ session, onClose }) => {
   const c = courseColor(session.courseCode);
+  const isLab = session.type === 'lab';
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') onClose();
+  };
+
   return (
-    <div style={P.modalBg} onClick={onClose}>
-      <div style={{ ...P.modal, borderColor: `${c.border}44` }} onClick={e => e.stopPropagation()} className="modal-in">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: c.text, fontFamily: 'monospace' }}>{session.courseCode}</div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: '#e2eaf4', marginTop: 2 }}>{session.courseName}</div>
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'backdropIn 0.25s ease-out' }}
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        style={{ background: '#fff', borderRadius: 20, padding: 28, maxWidth: 480, width: '100%', boxShadow: '0 32px 80px rgba(0,0,0,.2)', border: `1px solid ${c.border}20`, animation: 'modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+        onKeyDown={handleKeyDown}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <div style={{ background: '#F3F4F6', borderRadius: 8, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {isLab ? <FlaskConical size={20} color={c.text} /> : <BookOpen size={20} color={c.text} />}
+            </div>
+            <div>
+              <div id="modal-title" style={{ fontSize: 11, fontWeight: 700, color: c.text, fontFamily: "'DM Mono', monospace", letterSpacing: '.5px', textTransform: 'uppercase' }}>{session.courseCode}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', marginTop: 1, lineHeight: 1.2, maxWidth: 300 }}>{session.courseName}</div>
+            </div>
           </div>
-          <button onClick={onClose} style={P.modalClose}>✕</button>
+          <button
+            onClick={onClose}
+            aria-label="Close session details"
+            className="modal-close-btn"
+            style={{ background: '#F3F4F6', border: 'none', borderRadius: 7, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280', flexShrink: 0, transition: 'all 0.2s', fontSize: 18 }}
+          >
+            <X size={16} />
+          </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
-          {([
-            ['Teacher',  session.teacherName],
-            ['Room',     session.roomNumber || '—'],
-            ['Day',      session.dayOfWeek],
-            ['Time',     `${session.startTime} – ${session.endTime}`],
-            ['Type',     session.type.toUpperCase()],
-            ['Division', session.division + (session.batch ? ` · ${session.batch}` : '')],
-            ['Semester', String(session.semester)],
-            ['Credits',  String(session.credits || '—')],
-          ] as [string,string][]).map(([k, v]) => (
-            <div key={k} style={{ background: '#06090e', border: '1px solid #0e1826', borderRadius: 7, padding: '9px 11px' }}>
-              <div style={{ fontSize: 8, color: '#1e3050', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>{k}</div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af' }}>{v}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          {[
+            { icon: <GraduationCap size={14} />, label: 'Teacher', val: session.teacherName || 'Not assigned' },
+            { icon: <Building2 size={14} />, label: 'Room', val: session.roomNumber || 'Not assigned' },
+            { icon: <Calendar size={14} />, label: 'Day', val: session.dayOfWeek },
+            { icon: <Clock3 size={14} />, label: 'Time', val: `${session.startTime} – ${session.endTime}` },
+            { icon: <Users2 size={14} />, label: 'Division', val: `Div ${session.division}${session.batch ? ` · Batch ${session.batch}` : ''}` },
+            { icon: <Layers size={14} />, label: 'Semester', val: `Semester ${session.semester}` },
+          ].map(({ icon, label, val }) => (
+            <div key={label} style={{ background: '#F9FAFB', borderRadius: 8, padding: '10px 12px', border: '1px solid #F3F4F6' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#94A3B8', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 3 }}>{icon}{label}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>{val}</div>
             </div>
           ))}
+        </div>
+        <div style={{ padding: '11px 13px', background: c.bg, borderRadius: 8, border: `1px solid ${c.border}40`, display: 'flex', alignItems: 'center', gap: 7 }}>
+          {isLab ? <FlaskConical size={15} color={c.text} /> : <BookOpen size={15} color={c.text} />}
+          <span style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{isLab ? 'Laboratory Session' : 'Theory Lecture'}</span>
+          {session.credits && <span style={{ marginLeft: 'auto', fontSize: 11, color: c.text, opacity: .7 }}>{session.credits} credits</span>}
         </div>
       </div>
     </div>
@@ -666,94 +719,137 @@ const DetailModal: React.FC<{ session: Session; onClose: () => void }> = ({ sess
 // STYLES
 // ─────────────────────────────────────────────────────────────────────────────
 const P: Record<string, React.CSSProperties> = {
-  root:        { minHeight: '100vh', background: '#05080f', color: '#c4d4e8', fontFamily: "'Syne','DM Sans',system-ui,sans-serif", display: 'flex', flexDirection: 'column' },
-  header:      { position: 'sticky', top: 0, zIndex: 50, background: '#06090eee', backdropFilter: 'blur(16px)', borderBottom: '1px solid #0a0f1a', padding: '13px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  brandMark:   { width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg,#1d4ed8,#2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 12, color: '#fff', flexShrink: 0 },
-  brandName:   { fontSize: 16, fontWeight: 800, color: '#e2eaf4', letterSpacing: '-0.5px' },
-  brandSub:    { fontSize: 9, color: '#1e3050', letterSpacing: '0.3px', marginTop: 1 },
-  btnGhost:    { background: 'transparent', border: '1px solid #0e1826', color: '#3d5470', padding: '6px 14px', borderRadius: 7, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 },
+  root:        { minHeight: '100vh', background: '#F8FAFC', color: '#1F2937', fontFamily: "'Outfit','DM Sans',system-ui,sans-serif", display: 'flex', flexDirection: 'column' },
+  header:      { position: 'sticky', top: 0, zIndex: 50, background: '#FFF', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E5E7EB', padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 2px rgba(0,0,0,.03)' },
+  brandMark:   { width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg,#3B82F6,#2563EB)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 14, color: '#fff', flexShrink: 0 },
+  brandName:   { fontSize: 16, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.3px' },
+  brandSub:    { fontSize: 11, color: '#94A3B8', letterSpacing: '0px', marginTop: 1, fontWeight: 500 },
+  btnGhost:    { background: 'transparent', border: '1px solid #E5E7EB', color: '#6B7280', padding: '8px 16px', borderRadius: 8, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, transition: 'all 0.15s', outline: 'none' },
 
-  statusBar:   { background: '#06090f', borderBottom: '1px solid #0a0f1a', padding: '7px 24px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' },
-  statusChip:  { fontSize: 11, background: '#090f1c', border: '1px solid #0a0f1a', padding: '3px 10px', borderRadius: 20, fontFamily: 'monospace' },
+  statusBar:   { background: '#FFF', borderBottom: '1px solid #E5E7EB', padding: '12px 28px', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' },
+  statusChip:  { fontSize: 12, background: '#F9FAFB', border: '1px solid #E5E7EB', padding: '6px 12px', borderRadius: 6, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 },
 
   body:        { flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 },
 
   // Config panel
-  configPanel: { width: 260, minWidth: 260, background: '#07090f', borderRight: '1px solid #0a0f1a', padding: '20px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 0 },
-  configTitle: { fontSize: 10, fontWeight: 800, color: '#1e3050', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 18 },
-  fieldGroup:  { marginBottom: 18 },
-  fieldLabel:  { fontSize: 9, fontWeight: 800, color: '#1e3050', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 8 },
-  togBtn:      { padding: '9px 0', background: '#060c18', border: '1px solid #0e1826', color: '#1e3050', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' },
-  togActive:   { background: '#0d1e38', borderColor: '#2563eb', color: '#60a5fa' },
-  divBtn:      { width: 50, height: 50, background: '#060c18', border: '2px solid #0e1826', color: '#1e3050', borderRadius: 9, cursor: 'pointer', fontSize: 18, fontWeight: 800, fontFamily: 'inherit' },
-  algoBtn:     { flex: 1, padding: '8px 0', background: '#060c18', border: '1px solid #0e1826', color: '#1e3050', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' },
-  input:       { width: '100%', background: '#060c18', border: '1px solid #0e1826', color: '#c4d4e8', padding: '9px 11px', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' },
-  infoNote:    { background: '#05172e', border: '1px solid #1e3a5f', borderRadius: 8, padding: '10px 12px', fontSize: 11, color: '#3b82f6', lineHeight: 1.6, marginBottom: 18 },
-  summaryRow:  { display: 'flex', background: '#060c18', border: '1px solid #0e1826', borderRadius: 9, padding: '11px 14px', marginBottom: 16 },
-  summaryCell: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 },
-  summaryK:    { fontSize: 8, color: '#1e3050', textTransform: 'uppercase', letterSpacing: '0.5px' },
-  summaryV:    { fontSize: 14, fontWeight: 800, color: '#c4d4e8' },
-  btnGenerate: { width: '100%', background: 'linear-gradient(135deg,#1d4ed8,#2563eb)', border: 'none', color: '#fff', padding: '13px', borderRadius: 9, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  btnDisabled: { opacity: 0.4, cursor: 'not-allowed' },
+  configPanel: { width: 280, minWidth: 280, background: '#FFF', borderRight: '1px solid #E5E7EB', padding: '24px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 0 },
+  configTitle: { fontSize: 10, fontWeight: 800, color: '#9CA3AF', letterSpacing: '1.2px', textTransform: 'uppercase', marginBottom: 20 },
+  fieldGroup:  { marginBottom: 20 },
+  fieldLabel:  { fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.8px', textTransform: 'uppercase', marginBottom: 10 },
+  togBtn:      { padding: '9px 0', background: '#F9FAFB', border: '1px solid #E5E7EB', color: '#6B7280', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', transition: 'all 0.2s', outline: 'none' },
+  togActive:   { background: '#DBEAFE', borderColor: '#BFDBFE', color: '#1D4ED8', fontWeight: 800 },
+  divBtn:      { width: 48, height: 48, background: '#F3F4F6', border: '2px solid #E5E7EB', color: '#6B7280', borderRadius: 8, cursor: 'pointer', fontSize: 16, fontWeight: 800, fontFamily: 'inherit', transition: 'all 0.2s', outline: 'none' },
+  algoBtn:     { flex: 1, padding: '9px 0', background: '#F3F4F6', border: '1px solid #E5E7EB', color: '#6B7280', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', transition: 'all 0.2s', outline: 'none' },
+  input:       { width: '100%', background: '#F9FAFB', border: '1px solid #E5E7EB', color: '#111827', padding: '9px 11px', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'all 0.2s' },
+  infoNote:    { background: '#F0F9FF', border: '1px solid #E0F2FE', borderRadius: 8, padding: '11px 12px', fontSize: 11, color: '#0369A1', lineHeight: 1.5, marginBottom: 20, display: 'flex', gap: 8, alignItems: 'flex-start' },
+  summaryRow:  { display: 'flex', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '12px 14px', marginBottom: 20 },
+  summaryCell: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 },
+  summaryK:    { fontSize: 9, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 },
+  summaryV:    { fontSize: 16, fontWeight: 800, color: '#111827' },
+  btnGenerate: { width: '100%', background: 'linear-gradient(135deg,#3B82F6,#2563EB)', border: 'none', color: '#fff', padding: '13px', borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.25)' },
+  btnDisabled: { opacity: 0.5, cursor: 'not-allowed', boxShadow: 'none' },
 
   // Right panel
-  rightPanel:  { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 },
+  rightPanel:  { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, background: '#F8FAFC' },
 
-  emptyState:  { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, padding: 40 },
-  emptyIcon:   { fontSize: 48, marginBottom: 4 },
-  emptyTitle:  { fontSize: 20, fontWeight: 800, color: '#c4d4e8' },
-  emptySub:    { fontSize: 13, color: '#1e3050', textAlign: 'center', maxWidth: 360, lineHeight: 1.7 },
+  emptyState:  { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, padding: 40, textAlign: 'center' },
+  emptyIcon:   { fontSize: 56 },
+  emptyTitle:  { fontSize: 21, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.3px' },
+  emptySub:    { fontSize: 14, color: '#6B7280', maxWidth: 400, lineHeight: 1.6 },
 
-  logCard:     { padding: 28, maxWidth: 560, margin: '32px auto', width: '100%' },
-  logBox:      { background: '#05080f', border: '1px solid #0a0f1a', borderRadius: 9, padding: '14px 16px', fontFamily: 'monospace', fontSize: 11, display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 200, overflowY: 'auto' },
-  logLine:     { color: '#c4d4e8', lineHeight: 1.5 },
+  logCard:     { padding: 32, maxWidth: 600, margin: '48px auto', width: '100%' },
+  logBox:      { background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '11px 13px', fontFamily: "'DM Mono', monospace", fontSize: 11, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 240, overflowY: 'auto' },
+  logLine:     { color: '#374151', lineHeight: 1.5, fontWeight: 500 },
 
   // Results
-  resultTopbar: { display: 'flex', alignItems: 'center', padding: '10px 16px', borderBottom: '1px solid #0a0f1a', background: '#07090f', gap: 8, flexWrap: 'wrap' },
-  divTab:       { background: '#060c18', border: '1px solid #0a0f1a', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 },
-  divTabActive: { background: '#0d1e38', borderColor: '#2563eb' },
-  metricChip:   { background: '#05172e', border: '1px solid #1e3a5f', color: '#60a5fa', padding: '4px 10px', borderRadius: 20, fontSize: 11, fontFamily: 'monospace' },
-  btnPublish:   { background: 'linear-gradient(135deg,#1d4ed8,#2563eb)', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' },
-  btnPublished: { background: 'linear-gradient(135deg,#065f46,#059669)' },
-  conflictBanner: { padding: '7px 16px', background: '#1a0e05', borderBottom: '1px solid #2d1800', fontSize: 11, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 },
+  resultTopbar: { display: 'flex', alignItems: 'center', padding: '12px 18px', borderBottom: '1px solid #E5E7EB', background: '#FFF', gap: 10, flexWrap: 'wrap', justifyContent: 'space-between' },
+  divTab:       { background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 7, padding: '8px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, transition: 'all 0.2s', fontSize: 12, outline: 'none' },
+  divTabActive: { background: '#DBEAFE', borderColor: '#BFDBFE' },
+  metricChip:   { background: '#F0F9FF', border: '1px solid #E0F2FE', color: '#0369A1', padding: '5px 11px', borderRadius: 99, fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: 600 },
+  btnPublish:   { background: 'linear-gradient(135deg,#3B82F6,#2563EB)', border: 'none', color: '#fff', padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s', boxShadow: '0 2px 6px rgba(59, 130, 246, 0.2)', display: 'flex', alignItems: 'center', gap: 6, outline: 'none' },
+  btnPublished: { background: 'linear-gradient(135deg,#10B981,#059669)', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.2)' },
+  conflictBanner: { padding: '10px 14px', background: '#FFFBEB', borderBottom: '1px solid #FCD34D', fontSize: 11, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
 
   // Table
-  table:   { width: '100%', borderCollapse: 'collapse', minWidth: 820 },
-  thTime:  { width: 110, padding: '11px 14px', background: '#06090e', color: '#1e3050', fontSize: 8, fontWeight: 800, letterSpacing: '1.5px', borderBottom: '1px solid #0a0f1a', textAlign: 'left', position: 'sticky', top: 0, zIndex: 10 },
-  th:      { padding: '11px 7px', background: '#06090e', color: '#2563eb', fontSize: 9, fontWeight: 800, letterSpacing: '1.5px', borderBottom: '1px solid #0a0f1a', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10 },
-  tdTime:  { padding: '8px 8px 8px 14px', background: '#07090f', borderRight: '1px solid #0a0f1a', borderBottom: '1px solid #060b14', verticalAlign: 'top', minWidth: 110 },
-  timeLabel: { fontSize: 10, color: '#374151', fontFamily: 'monospace', lineHeight: 1.4 },
-  slotBadge: { fontSize: 7, fontWeight: 700, padding: '1px 6px', borderRadius: 3, display: 'inline-block', marginTop: 3, textTransform: 'uppercase' },
-  td:      { padding: 5, borderBottom: '1px solid #060b14', verticalAlign: 'top', minWidth: 142 },
-  tdOver:  { background: '#0a1e38', outline: '2px dashed #1d4ed8', outlineOffset: -2 },
-  dropHint:{ height: 52, border: '2px dashed #1a3a6e', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1e3050', fontSize: 10 },
+  table:   { width: '100%', borderCollapse: 'collapse', minWidth: 900 },
+  thTime:  { width: 130, padding: '8px 12px', background: '#F9FAFB', color: '#94A3B8', fontSize: 9, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderBottom: '2px solid #E5E7EB', textAlign: 'left', position: 'sticky', top: 0, zIndex: 10 },
+  th:      { padding: '8px 12px', background: '#F9FAFB', color: '#94A3B8', fontSize: 9, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', borderBottom: '2px solid #E5E7EB', textAlign: 'center', position: 'sticky', top: 0, zIndex: 10 },
+  tdTime:  { padding: '6px 12px', background: '#FFF', borderRight: '1px solid #F1F5F9', borderBottom: '1px solid #F1F5F9', verticalAlign: 'top', minWidth: 130 },
+  timeLabel: { fontSize: 11, color: '#374151', fontFamily: "'DM Mono', monospace", lineHeight: 1.4, fontWeight: 700, marginBottom: 3 },
+  slotBadge: { fontSize: 8, fontWeight: 700, padding: '2px 8px', borderRadius: 99, display: 'inline-block', textTransform: 'uppercase', letterSpacing: '.3px' },
+  td:      { padding: '6px 12px', borderBottom: '1px solid #F1F5F9', verticalAlign: 'top', minWidth: 156, background: '#FFF', transition: 'background-color 0.15s ease' },
+  tdOver:  { background: '#F0F9FF', outline: '2px dashed #7DD3FC', outlineOffset: -2 },
+  dropHint:{ height: 60, border: '2px dashed #BFDBFE', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: 11, fontWeight: 600, background: '#F0F9FF' },
 
   // Modal
-  modalBg:    { position: 'fixed', inset: 0, background: '#000000bb', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modal:      { background: '#090f1c', border: '1px solid #1a2d4a', borderRadius: 14, padding: 26, maxWidth: 430, width: '100%', boxShadow: '0 32px 80px #000000cc' },
-  modalClose: { background: '#060c18', border: '1px solid #0e1826', color: '#374151', width: 26, height: 26, borderRadius: 6, cursor: 'pointer', fontSize: 12 },
+  modalBg:    { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  modal:      { background: '#FFF', border: '1px solid #E5E7EB', borderRadius: 20, padding: 28, maxWidth: 480, width: '100%', boxShadow: '0 32px 80px rgba(0,0,0,.15)' },
+  modalClose: { background: '#F3F4F6', border: '1px solid #E5E7EB', color: '#6B7280', width: 30, height: 30, borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700 },
 
-  toast: { position: 'fixed', bottom: 22, right: 22, zIndex: 9999, padding: '11px 18px', borderRadius: 9, fontSize: 12, fontWeight: 600, border: '1px solid', boxShadow: '0 8px 30px #00000055', animation: 'slideUp 0.3s ease' },
+  toast: { position: 'fixed', bottom: 24, right: 24, zIndex: 9999, padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: '1px solid #16a34a', background: '#052e1a', color: '#86efac', boxShadow: '0 8px 24px rgba(0,0,0,.12)', animation: 'slideUp 0.3s ease', display: 'flex', alignItems: 'center', gap: 8 },
 };
 
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap');
   * { box-sizing: border-box; }
-  ::-webkit-scrollbar { width:5px; height:5px; }
-  ::-webkit-scrollbar-thumb { background:#0e1826; border-radius:3px; }
-  .session-card { transition: transform 0.14s, box-shadow 0.14s; }
-  .session-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px #00000055; }
-  .generate-btn:not([disabled]):hover { opacity: 0.9; transform: translateY(-1px); transition: all 0.15s; }
-  .fade-in { animation: fadeIn 0.35s ease; }
-  .modal-in { animation: modalIn 0.22s ease; }
-  .spin-sm { width:16px; height:16px; border-radius:50%; border:2px solid #0e1826; border-top-color:#2563eb; animation:spin 0.7s linear infinite; flex-shrink:0; }
-  .spin-lg { width:28px; height:28px; border-radius:50%; border:3px solid #0e1826; border-top-color:#2563eb; animation:spin 0.8s linear infinite; }
-  @keyframes spin    { to { transform:rotate(360deg); } }
-  @keyframes fadeIn  { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
-  @keyframes modalIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
-  @keyframes slideUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
-  select option { background: #090f1c; color: #c4d4e8; }
-  details summary::-webkit-details-marker { display:none; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #F9FAFB; }
+  ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; transition: background 0.2s; }
+  ::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+  
+  /* Cards & Interactive Elements */
+  .tt-card { transition: all 0.2s ease; }
+  .tt-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,.1); }
+  .tt-card:focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+  .tt-card:active { transform: translateY(0); }
+  
+  /* Buttons */
+  .generate-btn:not([disabled]):hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4); }
+  .generate-btn:not([disabled]):focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+  .generate-btn:active:not([disabled]) { transform: translateY(0); }
+  button:focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+  
+  /* Modal interactions */
+  .modal-close-btn:hover { background: #E5E7EB !important; transform: scale(1.05); }
+  .modal-close-btn:focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+  .modal-close-btn:active { transform: scale(0.95); }
+  
+  /* Table hover states */
+  tbody tr:hover { background-color: #F9FAFB; }
+  tbody tr:hover td { background-color: #F9FAFB; }
+  
+  /* Division tabs */
+  [role="button"]:hover { opacity: 0.8; }
+  [role="button"]:focus-visible { outline: 2px solid #3B82F6; outline-offset: -2px; border-radius: 6px; }
+  
+  /* Animations */
+  .fade-in { animation: fadeIn 0.35s ease-out; }
+  .modal-in { animation: modalIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .spin-sm { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #E5E7EB; border-top-color: #3B82F6; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+  .spin-lg { width: 28px; height: 28px; border-radius: 50%; border: 3px solid #E5E7EB; border-top-color: #3B82F6; animation: spin 0.9s linear infinite; }
+  
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
+  @keyframes modalSlideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  
+  /* Focus & Accessibility */
+  input:focus { border-color: #3B82F6 !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); outline: none; }
+  input:focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+  button:focus { outline: none; }
+  button:focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+  *:focus-visible { outline-width: 2px; outline-style: solid; outline-color: #3B82F6; }
+  
+  /* Details/Summary */
+  details summary::-webkit-details-marker { display: none; }
+  details summary { cursor: pointer; user-select: none; padding: 4px 0; }
+  details summary:focus-visible { outline: 2px solid #3B82F6; outline-offset: 2px; }
+  
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
 `;
 
 const tick = (ms: number) => new Promise(r => setTimeout(r, ms));
