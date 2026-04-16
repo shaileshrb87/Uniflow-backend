@@ -426,6 +426,294 @@ router.get('/my-schedule', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/timetable/my-timetable (Student Personal Timetable)
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get('/my-timetable', async (req, res) => {
+  try {
+    // Check if user is a student
+    if (req.user.role !== 'student') {
+      return res.status(403).json({
+        success: false,
+        message: 'This endpoint is only available for students. Admins should use /list endpoint.'
+      });
+    }
+
+    // Get student's department, semester, and division
+    const student = await User.findById(req.user._id)
+      .populate('department', 'name code')
+      .lean();
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student profile not found'
+      });
+    }
+
+    if (!student.department || !student.semester || !student.division) {
+      return res.status(400).json({
+        success: false,
+        message: 'Your profile is incomplete. Please contact admin to set your semester and division.'
+      });
+    }
+
+    const { status = 'Published', academicYear } = req.query;
+
+    // Build query for student's timetable
+    const query = {
+      'studentGroup.department': student.department._id,
+      'studentGroup.semester': student.semester,
+      'studentGroup.division': student.division,
+      status: status === 'any' ? { $in: ['Draft', 'Published'] } : status
+    };
+
+    if (academicYear) {
+      query.academicYear = Number(academicYear);
+    }
+
+    // Helper function to check if a value is a valid MongoDB ObjectId
+    const isValidObjectId = (id) => {
+      return id && /^[a-f\d]{24}$/i.test(id.toString());
+    };
+
+    // Fetch timetables without populating first
+    const timetables = await Timetable.find(query).lean();
+
+    if (!timetables.length) {
+      return res.status(200).json({
+        success: true,
+        message: 'No timetable found for your semester and division',
+        data: []
+      });
+    }
+
+    // Clean up schedule entries with invalid room references
+    const cleanedTimetables = timetables.map(tt => ({
+      ...tt,
+      schedule: (tt.schedule || []).filter(entry => {
+        // Keep only entries with valid room ObjectIds (skip placeholders)
+        return isValidObjectId(entry.room);
+      })
+    }));
+
+    // Now populate with clean data
+    const populatedTimetables = await Timetable.populate(cleanedTimetables, [
+      { path: 'studentGroup.department', select: 'name code' },
+      { path: 'schedule.Course', select: 'courseCode name courseType credits semester' },
+      { 
+        path: 'schedule.teacher',
+        populate: { path: 'user', select: 'name email' },
+      },
+      { path: 'schedule.room', select: 'roomNumber floor type capacity' }
+    ]);
+
+    const timetablesWithPopulated = populatedTimetables
+      .sort((a, b) => {
+        const aSem = a.studentGroup?.semester || 0;
+        const bSem = b.studentGroup?.semester || 0;
+        if (aSem !== bSem) return aSem - bSem;
+        const aDiv = a.studentGroup?.division || 'A';
+        const bDiv = b.studentGroup?.division || 'A';
+        return aDiv.localeCompare(bDiv);
+      });
+
+    // Format response with display fields
+    const result = timetablesWithPopulated.map(tt => ({
+      _id: tt._id,
+      name: tt.name,
+      status: tt.status,
+      academicYear: tt.academicYear,
+      publishedAt: tt.publishedAt,
+      studentGroup: {
+        department: tt.studentGroup?.department,
+        semester: tt.studentGroup?.semester,
+        division: tt.studentGroup?.division,
+        departmentName: tt.studentGroup?.department?.name || null
+      },
+      schedule: (tt.schedule || []).map(entry => {
+        const course = entry.Course;
+        const teacher = entry.teacher;
+        const room = entry.room;
+
+        return {
+          // Keep original ObjectId fields for reference
+          Course: entry.Course,
+          teacher: entry.teacher,
+          room: entry.room,
+
+          // ── Guaranteed display fields ────────────────────────────────────
+          courseCode: course?.courseCode || '—',
+          courseName: course?.name || 'Untitled Course',
+          courseType: course?.courseType || entry.type,
+          credits: course?.credits || null,
+
+          teacherName: teacher?.user?.name || teacher?.name || 'Unassigned',
+          teacherEmail: teacher?.user?.email || null,
+
+          roomNumber: room?.roomNumber || '—',
+          roomType: room?.type || null,
+          roomCapacity: room?.capacity || null,
+          floorNumber: room?.floor || null,
+
+          // Pass-through scheduling fields
+          type: entry.type,
+          dayOfWeek: entry.dayOfWeek,
+          startTime: entry.startTime,
+          endTime: entry.endTime
+        };
+      }),
+      createdAt: tt.createdAt,
+      updatedAt: tt.updatedAt
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: result,
+      student: {
+        name: student.name,
+        department: student.department.name,
+        semester: student.semester,
+        division: student.division
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching student timetable:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch your timetable',
+      error: error.message
+    });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/timetable/student-schedule (Frontend-compatible format)
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get('/student-schedule', async (req, res) => {
+  try {
+    // Check if user is a student
+    if (req.user.role !== 'student') {
+      return res.status(403).json({
+        success: false,
+        message: 'This endpoint is only available for students.'
+      });
+    }
+
+    // Get student's department, semester, and division
+    const student = await User.findById(req.user._id)
+      .populate('department', 'name code')
+      .lean();
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student profile not found'
+      });
+    }
+
+    if (!student.department || !student.semester || !student.division) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          sessions: [],
+          message: 'Your profile is incomplete. Please contact admin to set your semester and division.'
+        }
+      });
+    }
+
+    // Build query for student's timetable
+    const query = {
+      'studentGroup.department': student.department._id,
+      'studentGroup.semester': student.semester,
+      'studentGroup.division': student.division,
+      status: 'Published'
+    };
+
+    // Helper function to check if a value is a valid MongoDB ObjectId
+    const isValidObjectId = (id) => {
+      return id && /^[a-f\d]{24}$/i.test(id.toString());
+    };
+
+    // Fetch timetables without populating first
+    const timetables = await Timetable.find(query).lean();
+
+    // Clean up schedule entries with invalid room references
+    const cleanedTimetables = timetables.map(tt => ({
+      ...tt,
+      schedule: (tt.schedule || []).filter(entry => {
+        return isValidObjectId(entry.room);
+      })
+    }));
+
+    // Now populate with clean data
+    const populatedTimetables = await Timetable.populate(cleanedTimetables, [
+      { path: 'studentGroup.department', select: 'name code' },
+      { path: 'schedule.Course', select: 'courseCode name courseType credits semester' },
+      { 
+        path: 'schedule.teacher',
+        populate: { path: 'user', select: 'name email' },
+      },
+      { path: 'schedule.room', select: 'roomNumber floor type capacity' }
+    ]);
+
+    // Flatten and convert to frontend-expected format
+    const sessions: any[] = [];
+
+    populatedTimetables.forEach(tt => {
+      (tt.schedule || []).forEach((entry: any) => {
+        const course = entry.Course;
+        const teacher = entry.teacher;
+        const room = entry.room;
+
+        sessions.push({
+          entryId: `${entry.dayOfWeek}-${entry.startTime}-${course?.courseCode || 'N/A'}`,
+          courseId: course?._id || entry.Course,
+          courseName: course?.name || 'Untitled Course',
+          courseCode: course?.courseCode || '—',
+          teacherId: teacher?._id || entry.teacher,
+          teacherName: teacher?.user?.name || teacher?.name || 'Unassigned',
+          roomId: room?._id || entry.room,
+          roomNumber: room?.roomNumber || '—',
+          type: entry.type || 'Theory',
+          dayOfWeek: entry.dayOfWeek,
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+          semester: entry.semester || student.semester,
+          division: entry.division || student.division
+        });
+      });
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        sessions: sessions,
+        student: {
+          name: student.name,
+          department: student.department.name,
+          semester: student.semester,
+          division: student.division
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching student schedule:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch your schedule',
+      data: {
+        sessions: []
+      },
+      error: error.message
+    });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/timetable/teachers
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/teachers', async (req, res) => {
@@ -609,23 +897,45 @@ router.get('/list', async (req, res) => {
     if (academicYear) query['academicYear']            = Number(academicYear);
     if (status)       query['status']                 = status;
  
-    const timetables = await Timetable.find(query)
-      // Populate department name/code
-      .populate('studentGroup.department', 'name code')
-      // Populate course info
-      .populate('schedule.Course', 'courseCode name courseType credits semester')
-      // Populate teacher → user (for name/email)
-      .populate({
-        path:     'schedule.teacher',
-        populate: { path: 'user', select: 'name email' },
+    // Helper function to check if a value is a valid MongoDB ObjectId
+    const isValidObjectId = (id) => {
+      return id && /^[a-f\d]{24}$/i.test(id.toString());
+    };
+
+    // Clean up schedule entries with invalid room references
+    const timetables = await Timetable.find(query).lean();
+    
+    const cleanedTimetables = timetables.map(tt => ({
+      ...tt,
+      schedule: (tt.schedule || []).filter(entry => {
+        // Keep only entries with valid room ObjectIds (skip placeholders)
+        return isValidObjectId(entry.room);
       })
-      // Populate room info
-      .populate('schedule.room', 'roomNumber floor type capacity')
-      .sort({ 'studentGroup.semester': 1, 'studentGroup.division': 1, createdAt: -1 })
-      .lean();
+    }));
+
+    // Now populate with clean data
+    const populatedTimetables = await Timetable.populate(cleanedTimetables, [
+      { path: 'studentGroup.department', select: 'name code' },
+      { path: 'schedule.Course', select: 'courseCode name courseType credits semester' },
+      { 
+        path: 'schedule.teacher',
+        populate: { path: 'user', select: 'name email' },
+      },
+      { path: 'schedule.room', select: 'roomNumber floor type capacity' }
+    ]);
+
+    const timetablesWithPopulated = populatedTimetables
+      .sort((a, b) => {
+        const aSem = a.studentGroup?.semester || 0;
+        const bSem = b.studentGroup?.semester || 0;
+        if (aSem !== bSem) return aSem - bSem;
+        const aDiv = a.studentGroup?.division || 'A';
+        const bDiv = b.studentGroup?.division || 'A';
+        return aDiv.localeCompare(bDiv);
+      });
  
     // Flatten so every schedule entry has guaranteed display fields
-    const result = timetables.map(tt => ({
+    const result = timetablesWithPopulated.map(tt => ({
       ...tt,
       studentGroup: {
         ...tt.studentGroup,

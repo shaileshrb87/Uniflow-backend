@@ -50,6 +50,14 @@ const userSchema = new mongoose.Schema({
     },
     index: true
   },
+  division: {
+    type: String,
+    enum: ['A', 'B', 'C', 'D', 'E', 'F'],
+    required: function() {
+      // Division is required for students only
+      return this.role === 'student';
+    }
+  },
   isActive: {
     type: Boolean,
     default: true
