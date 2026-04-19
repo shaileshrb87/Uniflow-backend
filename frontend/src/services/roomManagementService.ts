@@ -1,0 +1,736 @@
+/**
+ * Room Management Service
+ * Handles all room-related API operations for admin users
+ */
+
+import axios, { AxiosResponse } from 'axios';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
+// API client with request/response interceptors
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+});
+
+// Request interceptor to add auth token
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor for error handling
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Room interfaces
+export interface Room {
+  _id?: string;
+  roomNumber: string;
+  name: string;
+  building: string;
+  floor: number;
+  capacity: number;
+  type: 'classroom' | 'laboratory' | 'lecture_hall' | 'seminar_room' | 'auditorium' | 'library' | 'office' | 'other';
+  department?: string | { _id?: string; name?: string; code?: string; coursecode?: string };
+  features: string[];
+  equipment: Array<{
+    name: string;
+    quantity: number;
+    condition: 'excellent' | 'good' | 'fair' | 'poor' | 'needs_repair';
+  }>;
+  accessibility: {
+    wheelchairAccessible: boolean;
+    elevatorAccess: boolean;
+    disabledParking: boolean;
+    accessibleRestroom: boolean;
+  };
+  dimensions?: {
+    length: number;
+    width: number;
+    height: number;
+  };
+  airConditioning: boolean;
+  projector: boolean;
+  smartBoard: boolean;
+  wifi: boolean;
+  powerOutlets: number;
+  maintenanceSchedule?: {
+    lastMaintenance: string;
+    nextMaintenance: string;
+    maintenanceType: string;
+  };
+  bookingRules?: {
+    advanceBookingDays: number;
+    minimumBookingHours: number;
+    maximumBookingHours: number;
+    allowWeekendBooking: boolean;
+  };
+  isActive: boolean;
+  isAvailable: boolean;
+  notes?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RoomFilters {
+  search?: string;
+  building?: string;
+  floor?: number;
+  type?: string;
+  department?: string;
+  capacity?: {
+    min?: number;
+    max?: number;
+  };
+  features?: string[];
+  isActive?: boolean;
+  isAvailable?: boolean;
+  airConditioning?: boolean;
+  projector?: boolean;
+  smartBoard?: boolean;
+  wifi?: boolean;
+}
+
+export interface RoomStats {
+  totalRooms: number;
+  activeRooms: number;
+  inactiveRooms: number;
+  availableRooms: number;
+  unavailableRooms: number;
+  buildingDistribution: Record<string, number>;
+  typeDistribution: Record<string, number>;
+  departmentDistribution: Record<string, number>;
+  capacityDistribution: Record<string, number>;
+  averageCapacity: number;
+  totalCapacity: number;
+  featuresDistribution: Record<string, number>;
+  equipmentStats: {
+    totalEquipment: number;
+    equipmentByCondition: Record<string, number>;
+  };
+}
+
+export interface PaginatedRooms {
+  rooms: Room[];
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
+export interface BulkRoomOperation {
+  roomIds: string[];
+  action: 'activate' | 'deactivate' | 'delete' | 'updateBuilding' | 'updateDepartment' | 'makeAvailable' | 'makeUnavailable';
+  data?: {
+    building?: string;
+    department?: string;
+    isActive?: boolean;
+    isAvailable?: boolean;
+  };
+}
+
+export interface RoomUtilizationAnalyticsItem {
+  roomId: string;
+  roomName: string;
+  roomNumber: string;
+  bookedSlots: number;
+  totalSlots: number;
+  utilizationPercentage: number;
+  underUtilized: boolean;
+}
+
+export interface RoomHeatmapCellDetails {
+  subjectName: string;
+  teacherName: string;
+}
+
+export interface RoomHeatmapRoom {
+  roomId: string;
+  roomName: string;
+  roomNumber: string;
+  matrix: Record<string, Record<string, 0 | 1>>;
+  details: Record<string, Record<string, RoomHeatmapCellDetails | null>>;
+}
+
+export interface RoomHeatmapResponse {
+  days: string[];
+  timeSlots: string[];
+  rooms: RoomHeatmapRoom[];
+}
+
+export interface PeakHourItem {
+  dayOfWeek: string;
+  startTime: string;
+  bookingCount: number;
+}
+
+export interface RoomBookingPayload {
+  room: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  purpose: string;
+}
+
+export interface RoomBooking {
+  _id: string;
+  room: string | Room;
+  bookedBy?: {
+    _id?: string;
+    name?: string;
+    email?: string;
+    role?: string;
+  };
+  purpose: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: 'approved' | 'cancelled';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Room Management Service Class
+// Helper to unwrap mis-ordered ApiResponse instances
+function unwrapRoomData<T>(raw: any): T {
+  if (!raw) return raw as T;
+
+  // Standard backend envelope: { success, message, data, ... }
+  if (Object.prototype.hasOwnProperty.call(raw, 'data') && raw.data !== undefined && raw.data !== null) {
+    return raw.data as T;
+  }
+
+  // Already payload object/array
+  if (Array.isArray(raw) || raw.rooms || raw.roomNumber || raw._id) return raw as T;
+
+  // Legacy / mis-ordered envelope fallback
+  if (raw.message && typeof raw.message === 'object') {
+    const m = raw.message;
+    if (Array.isArray(m) || m.rooms || m.roomNumber || m._id || Object.keys(m).length > 1) return m as T;
+  }
+
+  return raw as T;
+}
+
+class RoomManagementService {
+
+  /**
+   * Get all rooms with optional filtering and pagination
+   */
+  async getAllRooms(
+    filters: RoomFilters = {},
+    page: number = 1,
+    limit: number = 10,
+    sortBy: string = 'roomNumber',
+    sortOrder: 'asc' | 'desc' = 'asc'
+  ): Promise<PaginatedRooms> {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        sortBy,
+        sortOrder,
+        ...Object.fromEntries(
+          Object.entries(filters).filter(([_, value]) => value !== undefined && value !== '')
+        )
+      });
+
+      const response: AxiosResponse<any> = await apiClient.get(
+        `/rooms?${params.toString()}`
+      );
+      // Backend pagination nests data differently (rooms + pagination). Map to expected shape.
+      const unwrapped = unwrapRoomData<any>(response.data);
+
+      if (Array.isArray(unwrapped)) {
+        return {
+          rooms: unwrapped,
+          totalCount: unwrapped.length,
+          currentPage: 1,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false
+        };
+      }
+
+      if (unwrapped.pagination) {
+        return {
+          rooms: unwrapped.rooms || unwrapped.pagination.rooms || [],
+          totalCount: unwrapped.pagination.totalRooms || unwrapped.pagination.totalCount || 0,
+          currentPage: unwrapped.pagination.currentPage || 1,
+          totalPages: unwrapped.pagination.totalPages || 1,
+          hasNextPage: unwrapped.pagination.hasNextPage ?? false,
+          hasPrevPage: unwrapped.pagination.hasPrevPage ?? false
+        } as PaginatedRooms;
+      }
+      return unwrapped as PaginatedRooms;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error('Error fetching rooms:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          url: error.config?.url,
+          params: error.config?.params,
+          data: error.response?.data
+        });
+        const backendMsg = (error.response?.data && (error.response.data.message || error.response.data.error)) || '';
+        throw new Error(`Failed to fetch rooms${backendMsg ? ': ' + backendMsg : ''}`);
+      }
+      console.error('Unknown error fetching rooms:', error);
+      throw new Error('Failed to fetch rooms');
+    }
+  }
+
+  /**
+   * Get a single room by ID
+   */
+  async getRoomById(id: string): Promise<Room> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.get(`/rooms/${id}`);
+      return unwrapRoomData<Room>(response.data);
+    } catch (error) {
+      console.error('Error fetching room:', error);
+      throw new Error('Failed to fetch room details');
+    }
+  }
+
+  /**
+   * Create a new room
+   */
+  async createRoom(roomData: Omit<Room, '_id' | 'createdAt' | 'updatedAt'>): Promise<Room> {
+    try {
+
+      const response: AxiosResponse<any> = await apiClient.post('/rooms', roomData);
+      console.log('Creating room with data:', roomData);
+      console.log('✅ Room created successfully:', response.data);
+      return unwrapRoomData<Room>(response.data);
+    } catch (error: any) {
+      console.error('❌ Error creating room:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+
+      // Preserve the original error for better debugging
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create room';
+      const newError = new Error(errorMessage);
+      (newError as any).response = error.response;
+      throw newError;
+    }
+  }
+
+  /**
+   * Update an existing room
+   */
+  async updateRoom(id: string, roomData: Partial<Room>): Promise<Room> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.put(`/rooms/${id}`, roomData);
+      return unwrapRoomData<Room>(response.data);
+    } catch (error) {
+      console.error('Error updating room:', error);
+      throw new Error('Failed to update room');
+    }
+  }
+
+  /**
+   * Delete a room
+   */
+  async deleteRoom(id: string): Promise<void> {
+    try {
+      await apiClient.delete(`/rooms/${id}`);
+    } catch (error) {
+      console.error('Error deleting room:', error);
+      throw new Error('Failed to delete room');
+    }
+  }
+
+  /**
+   * Toggle room status (active/inactive)
+   */
+  async toggleRoomStatus(id: string, isActive: boolean): Promise<Room> {
+    try {
+      // Backend expects PATCH /api/rooms/:id/status with body { isActive }
+      const response: AxiosResponse<any> = await apiClient.patch(
+        `/rooms/${id}/status`,
+        { isActive }
+      );
+      return unwrapRoomData<Room>(response.data);
+    } catch (error) {
+      console.error('Error toggling room status:', error);
+      throw new Error('Failed to update room status');
+    }
+  }
+
+  /**
+   * Toggle room availability
+   */
+  async toggleRoomAvailability(id: string, isAvailable: boolean): Promise<Room> {
+    try {
+      // Backend expects PATCH /api/rooms/:id/availability with body { isAvailable }
+      const response: AxiosResponse<any> = await apiClient.patch(
+        `/rooms/${id}/availability`,
+        { isAvailable }
+      );
+      return unwrapRoomData<Room>(response.data);
+    } catch (error) {
+      console.error('Error toggling room availability:', error);
+      throw new Error('Failed to update room availability');
+    }
+  }
+
+  /**
+   * Get room statistics
+   */
+  async getRoomStats(): Promise<RoomStats> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.get('/rooms/stats');
+      const raw = unwrapRoomData<any>(response.data) || {};
+      return {
+        totalRooms: Number(raw.totalRooms || 0),
+        activeRooms: Number(raw.activeRooms || 0),
+        inactiveRooms: Number((raw.totalRooms || 0) - (raw.activeRooms || 0)),
+        availableRooms: Number(raw.availableRooms || 0),
+        unavailableRooms: Number((raw.totalRooms || 0) - (raw.availableRooms || 0)),
+        buildingDistribution: raw.buildingDistribution || {},
+        typeDistribution: raw.typeDistribution || {},
+        departmentDistribution: raw.departmentDistribution || {},
+        capacityDistribution: raw.capacityDistribution || {},
+        averageCapacity: Number(raw.averageCapacity || 0),
+        totalCapacity: Number(raw.totalCapacity || 0),
+        featuresDistribution: raw.featuresDistribution || {},
+        equipmentStats: raw.equipmentStats || {
+          totalEquipment: 0,
+          equipmentByCondition: {}
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching room statistics:', error);
+      throw new Error('Failed to fetch room statistics');
+    }
+  }
+
+  /**
+   * Bulk operations on multiple rooms
+   */
+  async bulkUpdateRooms(operation: BulkRoomOperation): Promise<{
+    success: number;
+    failed: number;
+    errors: string[]
+  }> {
+    try {
+      // Backend bulk route is /api/rooms/bulk
+      const response = await apiClient.patch('/rooms/bulk', operation);
+      const payload = unwrapRoomData<any>(response.data) || {};
+      const total = operation.roomIds.length;
+      const changed = Number(payload.modifiedCount || payload.deletedCount || 0);
+
+      return {
+        success: changed,
+        failed: Math.max(0, total - changed),
+        errors: []
+      };
+    } catch (error) {
+      console.error('Error performing bulk operation:', error);
+      throw new Error('Failed to perform bulk operation');
+    }
+  }
+
+  /**
+   * Import rooms from CSV
+   */
+  async importRooms(file: File): Promise<{
+    imported: number;
+    failed: number;
+    errors: string[];
+  }> {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await apiClient.post('/rooms/import', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      const payload = unwrapRoomData<any>(response.data) || {};
+      return {
+        imported: Number(payload.imported || 0),
+        failed: Number(payload.failed || 0),
+        errors: payload.errors || []
+      };
+    } catch (error) {
+      console.error('Error importing rooms:', error);
+      throw new Error('Failed to import rooms');
+    }
+  }
+
+  /**
+   * Export rooms to CSV/JSON
+   */
+  async exportRooms(
+    format: 'csv' | 'json' = 'csv',
+    filters: RoomFilters = {}
+  ): Promise<Blob> {
+    try {
+      const params = new URLSearchParams({
+        format,
+        ...Object.fromEntries(
+          Object.entries(filters).filter(([_, value]) => value !== undefined && value !== '')
+        )
+      });
+
+      const response = await apiClient.get(`/rooms/export?${params.toString()}`, {
+        responseType: 'blob',
+      });
+      return unwrapRoomData(response.data);
+    } catch (error) {
+      console.error('Error exporting rooms:', error);
+      throw new Error('Failed to export rooms');
+    }
+  }
+
+  /**
+   * Get room template for CSV import
+   */
+  async getRoomTemplate(): Promise<Blob> {
+    try {
+      const response = await apiClient.get('/rooms/template', {
+        responseType: 'blob',
+      });
+      return unwrapRoomData(response.data);
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      throw new Error('Failed to download template');
+    }
+  }
+
+  /**
+   * Get buildings list
+   */
+  async getBuildings(): Promise<string[]> {
+    try {
+      const response = await apiClient.get('/rooms/buildings');
+      return unwrapRoomData<string[]>(response.data);
+    } catch (error) {
+      console.error('Error fetching buildings:', error);
+      return [
+        'Main Building',
+        'Computer Science Block',
+        'Engineering Block A',
+        'Engineering Block B',
+        'Laboratory Complex',
+        'Library Building',
+        'Administration Block'
+      ];
+    }
+  }
+
+  /**
+   * Get rooms by building and floor
+   */
+  async getRoomsByBuildingAndFloor(
+    building: string,
+    floor: number
+  ): Promise<Room[]> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.get(
+        `/rooms/building/${building}/floor/${floor}`
+      );
+      return unwrapRoomData<Room[]>(response.data);
+    } catch (error) {
+      console.error('Error fetching rooms by building and floor:', error);
+      throw new Error('Failed to fetch rooms');
+    }
+  }
+
+  /**
+   * Check room availability for a time slot
+   */
+  async checkRoomAvailability(
+    roomId: string,
+    date: string,
+    startTime: string,
+    endTime: string
+  ): Promise<{
+    available: boolean;
+    conflicts: Array<{
+      subject: string;
+      startTime: string;
+      endTime: string;
+      teacher: string;
+    }>;
+  }> {
+    try {
+      const response = await apiClient.get(`/rooms/${roomId}/availability`, {
+        params: { date, startTime, endTime }
+      });
+      return unwrapRoomData(response.data);
+    } catch (error) {
+      console.error('Error checking room availability:', error);
+      throw new Error('Failed to check room availability');
+    }
+  }
+
+  /**
+   * Get room utilization report
+   */
+  async getRoomUtilization(
+    roomId?: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<RoomUtilizationAnalyticsItem[]> {
+    try {
+      const params = new URLSearchParams();
+      if (roomId) params.append('roomId', roomId);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+
+      const response = await apiClient.get(`/rooms/utilization?${params.toString()}`);
+      return unwrapRoomData(response.data);
+    } catch (error) {
+      console.error('Error fetching room utilization:', error);
+      throw new Error('Failed to fetch room utilization');
+    }
+  }
+
+  /**
+   * Get weekly occupancy heatmap data for all rooms
+   */
+  async getRoomHeatmap(): Promise<RoomHeatmapResponse> {
+    try {
+      const response = await apiClient.get('/rooms/heatmap');
+      return unwrapRoomData<RoomHeatmapResponse>(response.data);
+    } catch (error) {
+      console.error('Error fetching room heatmap:', error);
+      throw new Error('Failed to fetch room heatmap');
+    }
+  }
+
+  /**
+   * Get top 3 busiest day/time slots across all rooms
+   */
+  async getRoomPeakHours(): Promise<PeakHourItem[]> {
+    try {
+      const response = await apiClient.get('/rooms/peak-hours');
+      return unwrapRoomData<PeakHourItem[]>(response.data);
+    } catch (error) {
+      console.error('Error fetching peak hour analysis:', error);
+      throw new Error('Failed to fetch peak hour analysis');
+    }
+  }
+
+  /**
+   * Update room equipment
+   */
+  async updateRoomEquipment(
+    roomId: string,
+    equipment: Array<{
+      name: string;
+      quantity: number;
+      condition: 'excellent' | 'good' | 'fair' | 'poor' | 'needs_repair';
+    }>
+  ): Promise<Room> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.patch(
+        `/rooms/${roomId}/equipment`,
+        { equipment }
+      );
+      return unwrapRoomData<Room>(response.data);
+    } catch (error) {
+      console.error('Error updating room equipment:', error);
+      throw new Error('Failed to update room equipment');
+    }
+  }
+
+  /**
+   * Schedule room maintenance
+   */
+  async scheduleRoomMaintenance(
+    roomId: string,
+    maintenanceData: {
+      maintenanceType: string;
+      scheduledDate: string;
+      estimatedDuration: number;
+      description: string;
+    }
+  ): Promise<Room> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.post(
+        `/rooms/${roomId}/maintenance`,
+        maintenanceData
+      );
+      return unwrapRoomData<Room>(response.data);
+    } catch (error) {
+      console.error('Error scheduling room maintenance:', error);
+      throw new Error('Failed to schedule room maintenance');
+    }
+  }
+
+  /**
+   * Create a room booking
+   */
+  async createRoomBooking(payload: RoomBookingPayload): Promise<RoomBooking> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.post('/room-bookings', payload);
+      return unwrapRoomData<RoomBooking>(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMsg = error.response?.data?.message || error.response?.data?.error;
+        throw new Error(backendMsg || 'Failed to create booking');
+      }
+      throw new Error('Failed to create booking');
+    }
+  }
+
+  /**
+   * Get bookings (optionally by room)
+   */
+  async getRoomBookings(roomId?: string): Promise<RoomBooking[]> {
+    try {
+      const params = roomId ? { room: roomId } : undefined;
+      const response: AxiosResponse<any> = await apiClient.get('/room-bookings', { params });
+      return unwrapRoomData<RoomBooking[]>(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMsg = error.response?.data?.message || error.response?.data?.error;
+        throw new Error(backendMsg || 'Failed to fetch bookings');
+      }
+      throw new Error('Failed to fetch bookings');
+    }
+  }
+
+  /**
+   * Cancel a booking
+   */
+  async cancelRoomBooking(id: string): Promise<RoomBooking> {
+    try {
+      const response: AxiosResponse<any> = await apiClient.patch(`/room-bookings/${id}/cancel`);
+      return unwrapRoomData<RoomBooking>(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMsg = error.response?.data?.message || error.response?.data?.error;
+        throw new Error(backendMsg || 'Failed to cancel booking');
+      }
+      throw new Error('Failed to cancel booking');
+    }
+  }
+}
+
+// Export singleton instance
+export const roomManagementService = new RoomManagementService();
+export default roomManagementService;
